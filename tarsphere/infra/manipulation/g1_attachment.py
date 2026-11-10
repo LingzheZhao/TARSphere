@@ -562,7 +562,7 @@ class G1AttachmentExecutor:
             self.grasp_contact_monitor = None
         if self.stage is not None:
             from tarsphere.simulator.core.util.physics import activate_collider
-            from omni.isaac.core.utils.prims import get_prim_at_path
+            from isaacsim.core.utils.prims import get_prim_at_path
 
             self.release_manipulation_stance()
             for item in self.objects:
@@ -1615,7 +1615,7 @@ def _restore_pickable_local_transform(
     """Restore authored local xform operations and remove carried momentum."""
     from pxr import Gf, UsdPhysics
     from tarsphere.simulator.core.util.physics import activate_collider
-    from omni.isaac.core.utils.prims import get_prim_at_path
+    from isaacsim.core.utils.prims import get_prim_at_path
 
     prim = _require_prim(stage, item.prim_path, label=item.object_id)
     activate_collider(get_prim_at_path(item.prim_path))
@@ -1827,7 +1827,7 @@ def _subtract_vectors(first: list[float], second: list[float]) -> list[float]:
 def _activate_pickable_collider(item: G1ManipulationObject) -> None:
     """Activate a pickable collider without leaking Isaac imports to tests."""
     from tarsphere.simulator.core.util.physics import activate_collider
-    from omni.isaac.core.utils.prims import get_prim_at_path
+    from isaacsim.core.utils.prims import get_prim_at_path
 
     activate_collider(get_prim_at_path(item.prim_path))
 

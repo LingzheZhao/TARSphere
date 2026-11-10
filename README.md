@@ -1,3 +1,7 @@
+> **Fork status:** the `codex/isaac62-reproduction` branch adds a verified Isaac
+> Sim 6.2 G1 body/camera compatibility path. See [setup and scope](docs/ISAAC_SIM_6_2.md).
+> The original author instructions and Isaac 5.1 benchmark scope below are retained.
+
 <div align="center">
 
 <picture>

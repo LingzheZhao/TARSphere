@@ -777,7 +777,7 @@ class MobileFrankaPhysicalTaskExecutor:
         reach_geometry, closed_geometry = self._require_grasp_geometry_for_attachment()
 
         from tarsphere.simulator.core.util.physics import deactivate_collider
-        from omni.isaac.core.utils.prims import get_prim_at_path
+        from isaacsim.core.utils.prims import get_prim_at_path
 
         target = self._target()
         deactivate_collider(get_prim_at_path(target.prim_path))

@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+from importlib.util import find_spec
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -69,7 +72,7 @@ class SimulatorRunner:
         Raises:
             ValueError: If both `render` and `physics` are set to False, or if `steps` is less than or equal to 0.
         """
-        from omni.isaac.core.simulation_context import SimulationContext
+        from isaacsim.core.api.simulation_context import SimulationContext
 
         if not render and not physics:
             raise ValueError("both `render` and `physics` are set to False")
@@ -222,7 +225,7 @@ class SimulatorRunner:
         Returns:
             Observations and new task configurations in the requested order.
         """
-        from omni.isaac.core.simulation_context import SimulationContext
+        from isaacsim.core.api.simulation_context import SimulationContext
 
         new_task_configs = []
 
@@ -273,7 +276,7 @@ class SimulatorRunner:
 
     def clear_single_task(self, task_name: str):
         """Remove one named task and its environment prims."""
-        from omni.isaac.core.loggers import DataLogger
+        from isaacsim.core.api.loggers import DataLogger
 
         if task_name not in self.current_tasks:
             log.warning(
@@ -377,7 +380,11 @@ class SimulatorRunner:
             self.env_id_to_task_name_map[task.env_id] = task.name
 
         # create sim_view
-        SimulationManager._create_simulation_view("reset")
+        SimulationManager.initialize_physics()
+        # Classic 6.2 PhysicsContext only enables Fabric for a True parameter.
+        # Apply False explicitly so this runner's declared mode is respected.
+        SimulationManager.enable_fabric(bool(self.config.simulator.use_fabric))
+        log.info("Runtime Fabric enabled: %s", SimulationManager.is_fabric_enabled())
 
         # restore the state of envs that haven't been reset
         if reset_tasks:
@@ -429,7 +436,7 @@ class SimulatorRunner:
         log.info(
             f"simulator params: physics dt={physics_dt}, rendering dt={rendering_dt}, use_fabric={use_fabric}"
         )
-        from omni.isaac.core import World
+        from isaacsim.core.api import World
 
         self._world: World = World(
             physics_dt=physics_dt,
@@ -448,10 +455,45 @@ class SimulatorRunner:
         self._simulation_app = SimulationApp(
             {
                 "headless": headless,
+                "active_gpu": int(os.environ["TARSPHERE_KIT_ACTIVE_GPU"]),
+                "physics_gpu": 0,
+                "create_new_stage": False,
+                "disable_viewport_updates": True,
+                "extra_args": [
+                    "--ext-folder",
+                    str(Path(find_spec("isaaclab").origin).parent / "apps"),
+                    *sum(
+                        (
+                            [
+                                "--ext-folder",
+                                str(Path(find_spec("isaacsim").origin).parent / name),
+                            ]
+                            for name in (
+                                "exts",
+                                "extscache",
+                                "extsPhysics",
+                                "extsDeprecated",
+                            )
+                        ),
+                        [],
+                    ),
+                    "--portable-root",
+                    os.environ["TARSPHERE_LOCAL_SCRATCH"],
+                    "--reset-user",
+                    *(
+                        ["--ext-folder", os.environ["TARSPHERE_EXTRA_EXTENSION_ROOT"]]
+                        if os.environ.get("TARSPHERE_EXTRA_EXTENSION_ROOT")
+                        else []
+                    ),
+                ],
                 "anti_aliasing": 0,
                 "hide_ui": False,
                 "multi_gpu": False,
-            }
+            },
+            experience=str(
+                Path(__file__).resolve().parents[2]
+                / "infra/kit/tarsphere_isaac62_camera.kit"
+            ),
         )
         self._simulation_app._carb_settings.set(
             "/physics/cooking/ujitsoCollisionCooking", False
@@ -473,7 +515,7 @@ class SimulatorRunner:
 
     def setup_streaming_420(self, native: bool, webrtc: bool):
         if webrtc:
-            from omni.isaac.core.utils.extensions import enable_extension  # noqa
+            from isaacsim.core.utils.extensions import enable_extension  # noqa
 
             self._simulation_app.set_setting("/app/window/drawMouse", True)
             self._simulation_app.set_setting("/app/livestream/proto", "ws")
@@ -484,7 +526,7 @@ class SimulatorRunner:
             enable_extension("omni.services.streamclient.webrtc")
 
         elif native:
-            from omni.isaac.core.utils.extensions import enable_extension  # noqa
+            from isaacsim.core.utils.extensions import enable_extension  # noqa
 
             self._simulation_app.set_setting("/app/window/drawMouse", True)
             self._simulation_app.set_setting("/app/livestream/proto", "ws")
@@ -498,7 +540,7 @@ class SimulatorRunner:
 
     def setup_streaming_450(self, webrtc: bool):
         if webrtc:
-            from omni.isaac.core.utils.extensions import enable_extension
+            from isaacsim.core.utils.extensions import enable_extension
 
             self._simulation_app.set_setting("/app/window/drawMouse", True)
             enable_extension("omni.kit.livestream.webrtc")

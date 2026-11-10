@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import traceback
+import time
 
 
 def main() -> int:
@@ -80,16 +81,81 @@ def main() -> int:
     )
     try:
         frames = []
+        raw_observations = []
+        capture_records = []
+
+        def freeze_observation(observation, phase):
+            index = len(raw_observations)
+            raw_observations.append(observation)
+            frozen = dict(observation)
+            frozen["rgb"] = np.array(observation["rgb"], copy=True)
+            frozen["depth"] = np.array(observation["depth"], copy=True)
+            Image.fromarray(frozen["rgb"][..., :3].astype(np.uint8)).save(
+                output / f"immediate_rgb_{index}.png"
+            )
+            np.save(output / f"immediate_depth_{index}.npy", frozen["depth"])
+            import carb
+            from isaacsim.core.simulation_manager import SimulationManager
+
+            from pxr import UsdGeom
+            import omni.usd
+
+            body_path = (
+                observation["camera_path"].removesuffix("/d435_link/Camera") + "/pelvis"
+            )
+            body_prim = omni.usd.get_context().get_stage().GetPrimAtPath(body_path)
+            body_usd_position = None
+            if body_prim.IsValid():
+                body_transform = UsdGeom.XformCache().GetLocalToWorldTransform(
+                    body_prim
+                )
+                body_usd_position = [
+                    float(value) for value in body_transform.ExtractTranslation()
+                ]
+            capture_records.append(
+                {
+                    "phase": phase,
+                    "body_prim_path": body_path,
+                    "body_usd_world_position": body_usd_position,
+                    "body_physics_position_from_observation": observation["pose"][
+                        "position"
+                    ],
+                    "runtime_sync": {
+                        "fabric_enabled": bool(SimulationManager.is_fabric_enabled()),
+                        "update_to_usd": bool(
+                            carb.settings.get_settings().get("/physics/updateToUsd")
+                        ),
+                    },
+                    "monotonic_s": time.monotonic(),
+                    "physics_step": int(env._physics_steps),
+                    "camera_params": observation["camera_params"],
+                    "pose": observation["pose"],
+                    "depth_shares_frozen_memory": bool(
+                        np.shares_memory(observation["depth"], frozen["depth"])
+                    ),
+                }
+            )
+            (output / f"immediate_capture_{index}.json").write_text(
+                json.dumps(capture_records[-1], indent=2)
+            )
+            return frozen
+
         # Exercise the same cold preparation and resident soft reset as workers.
-        observations = [env.reset(scene_prepare_only=True, skip_navmesh=True)]
+        observations = [
+            freeze_observation(
+                env.reset(scene_prepare_only=True, skip_navmesh=True), "cold_prepare"
+            )
+        ]
         env.load_episode(episode)
-        observations.append(env.reset(skip_navmesh=True))
+        observations.append(
+            freeze_observation(env.reset(skip_navmesh=True), "resident_reset")
+        )
         for _ in range(args.steps):
             env._obs, _, _, _, _ = env._env.step(
                 action={"move_by_speed": [0.0, 0.0, 0.0]}
             )
             env._physics_steps += 1
-        observations.append(env.observe())
+        observations.append(freeze_observation(env.observe(), "after_120_controls"))
         env._assert_robot_upright(
             action_name="camera_smoke", env_action={"move_by_speed": [0.0, 0.0, 0.0]}
         )
@@ -128,6 +194,15 @@ def main() -> int:
                 }
             )
         report = {
+            "capture_records": capture_records,
+            "raw_reference_depth_changed_since_capture": [
+                not np.array_equal(raw["depth"], frozen["depth"])
+                for raw, frozen in zip(raw_observations, observations)
+            ],
+            "depth_pair_shares_memory": [
+                bool(np.shares_memory(raw_observations[0]["depth"], item["depth"]))
+                for item in raw_observations[1:]
+            ],
             "passed": True,
             "physical_gpu": args.gpu,
             "gpu_uuid": gpu_uuid,

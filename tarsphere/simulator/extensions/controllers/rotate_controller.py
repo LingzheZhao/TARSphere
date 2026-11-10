@@ -33,7 +33,7 @@ class RotateController(BaseController):
         start_orientation,
         goal_orientation,
     ) -> float:
-        from omni.isaac.core.utils.rotations import quat_to_euler_angles
+        from isaacsim.core.utils.rotations import quat_to_euler_angles
 
         delta_z_rot = (
             quat_to_euler_angles(goal_orientation)[-1]

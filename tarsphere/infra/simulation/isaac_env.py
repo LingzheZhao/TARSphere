@@ -11057,6 +11057,9 @@ class IsaacAutonomousEnv:
         _SIMULATOR_REP_CAMERA_PATCHED = True
 
     def _enable_anim_people_extensions(self):
+        if not self.episode.humans:
+            return
+
         """Enable official Isaac animated-people extensions and settings."""
         try:
             import carb
@@ -11633,7 +11636,7 @@ class IsaacAutonomousEnv:
 
                 SimulationManager._on_stop("tarsphere_navmesh_refresh")
                 self._reattach_physx_stage_for_runtime(stage)
-                SimulationManager._create_simulation_view("tarsphere_navmesh_refresh")
+                SimulationManager.initialize_physics()
                 physics_sim_view = getattr(world, "physics_sim_view", None)
             if physics_sim_view is None:
                 raise RuntimeError("World.physics_sim_view is None after refresh.")
@@ -13795,7 +13798,7 @@ class IsaacAutonomousEnv:
             [0.0, 0.0, HUMAN_COLLISION_HEIGHT_METERS * 0.5], dtype=float
         )
         try:
-            from omni.isaac.core.prims.xform_prim import XFormPrim
+            from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
             proxy = XFormPrim(proxy_path)
             proxy.set_world_pose(
@@ -13892,7 +13895,7 @@ class IsaacAutonomousEnv:
                 )
 
         try:
-            from omni.isaac.core.prims.xform_prim import XFormPrim
+            from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
             prim = XFormPrim(camera_path)
             prim.set_world_pose(

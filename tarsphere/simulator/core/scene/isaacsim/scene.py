@@ -11,8 +11,8 @@ class IsaacsimScene(IScene):
     """IsaacSim's implementation on `IScene` class."""
 
     def __init__(self):
-        from omni.isaac.core import World
-        from omni.isaac.core.scenes import Scene
+        from isaacsim.core.api import World
+        from isaacsim.core.api.scenes import Scene
 
         self._scene: Scene = World.instance().scene
 
@@ -22,7 +22,7 @@ class IsaacsimScene(IScene):
         prim_path_root = f"World/env_{env_id}/scene"
         source, prim_path = validate_scene_file(usd_path, prim_path_root)
 
-        from omni.isaac.core.utils.prims import create_prim
+        from isaacsim.core.utils.prims import create_prim
 
         position = [
             env_offset[idx] + i for idx, i in enumerate(task_config.scene_position)

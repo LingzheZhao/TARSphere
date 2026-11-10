@@ -375,7 +375,7 @@ class UsdKinematicCharacters:
         if self.is_scene_bound(human_id):
             return
         import numpy as np
-        from omni.isaac.core.prims.xform_prim import XFormPrim
+        from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
         from tarsphere.infra.control.physical_contracts import (
             HUMAN_CHARACTER_YAW_OFFSET_RAD,
