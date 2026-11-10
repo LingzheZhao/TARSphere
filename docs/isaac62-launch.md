@@ -10,9 +10,10 @@ Model services can use separate interpreters through `TARSPHERE_SAM3_PYTHON`,
 `TARSPHERE_GRASPGENX_PYTHON`, and `TARSPHERE_XNAVDP_PYTHON`. Set these to the pinned
 model environment; leave the simulator's NumPy installation untouched.
 
-`TARSPHERE_MODEL_SERVICE_GPU` is a physical GPU index; the service launcher
-checks that it belongs to the caller's `CUDA_VISIBLE_DEVICES` allocation.
-Resolve that index from the allocated device, rather than assuming index zero.
+`TARSPHERE_MODEL_SERVICE_GPU` is an NVML GPU index as seen inside the execution
+container; the service launcher checks that it belongs to the caller's
+`CUDA_VISIBLE_DEVICES` allocation. Resolve it by the allocated GPU UUID.
+The scheduler's host device number can differ from the container's index.
 XNavDP forwards `TARSPHERE_MODEL_GPU` directly to its `CUDA_VISIBLE_DEVICES`.
 
 From the repository root, with `TARSPHERE_PYTHON` set to the SDK interpreter:
@@ -45,5 +46,5 @@ the one-worker settings above do not constrain the number of visible GPUs.
 For external GraspGenX resources set `TARSPHERE_GRASPGENX_CHECKPOINT_ROOT` and
 `TARSPHERE_GRASPGENX_GRIPPER_ASSETS`; startup forwards these explicit CLI paths.
 Separately, upstream model construction may use `GRASPGENX_CHECKPOINT_DIR` and
-`GRIPPER_CFG_DIR`; configure these in the service environment to point to the
+`GRASPGENX_GRIPPER_CFG_DIR`; configure these in the service environment to point to the
 provisioned resources and avoid implicit downloads or cloning.
