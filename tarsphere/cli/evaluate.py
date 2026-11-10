@@ -443,30 +443,61 @@ def navdp_pid_file(port: int) -> Path:
     return state_dir / f"x-navdp-{port}.pid"
 
 
+def _process_identity(pid: int) -> tuple[str, str] | None:
+    """Linux process state and birth time; zombies have already terminated."""
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return fields[0], fields[19]
+
+
+def _reap_child_if_exited(pid: int) -> None:
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        pass  # A service started by the shell is usually not our direct child.
+
+
 def stop_navdp(port: int) -> None:
     path = navdp_pid_file(port)
     if not path.is_file():
         return
-    raw = "".join(character for character in path.read_text() if character.isdigit())
-    if not raw:
+    raw = path.read_text().strip()
+    if not raw.isdecimal():
+        raise RuntimeError(f"Invalid X-NavDP PID file: {path}")
+    pid = int(raw)
+    if pid <= 0:
+        raise RuntimeError(f"Invalid X-NavDP PID: {pid}")
+    identity = _process_identity(pid)
+    if identity is None or identity[0] in ("Z", "X"):
+        _reap_child_if_exited(pid)
         path.unlink(missing_ok=True)
         return
-    pid = int(raw)
     try:
-        command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
     except (FileNotFoundError, ProcessLookupError):
         path.unlink(missing_ok=True)
         return
-    if (
-        b"eval.src.policy_server" not in command
-        or f"--port {port}".encode() not in command
-    ):
+    expected_port = str(port).encode()
+    port_matches = any(
+        token == b"--port" and index + 1 < len(command)
+        and command[index + 1] == expected_port
+        for index, token in enumerate(command)
+    )
+    if b"eval.src.policy_server" not in command or not port_matches:
         raise RuntimeError(f"Refusing to stop PID {pid}; it is not X-NavDP port {port}")
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(100):
+    # Check for a changed process identity before signalling.
+    current = _process_identity(pid)
+    if current is not None and current[1] == identity[1] and current[0] not in ("Z", "X"):
         try:
-            os.kill(pid, 0)
+            os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
+            pass
+    for _ in range(100):
+        current = _process_identity(pid)
+        if current is None or current[0] in ("Z", "X") or current[1] != identity[1]:
+            _reap_child_if_exited(pid)
             break
         time.sleep(0.1)
     else:
