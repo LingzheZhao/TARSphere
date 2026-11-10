@@ -2158,11 +2158,30 @@ class NavigateToPointGoalHandler(_PointGoalValidator):
             }
             if human_exclusion_zones:
                 astar_kwargs["world_exclusion_zones"] = human_exclusion_zones
-            path, goal_world_xy, astar_failure = grid.astar_to_goal_region(
-                robot_xy,
-                requested_world_xy,
-                **astar_kwargs,
-            )
+            # Relative commands first try their actual endpoint. Searching a
+            # broad arrival disk first can select the robot's own start cell.
+            relative_request = call.tool == "navigate_to_pointgoal"
+            path = None
+            if relative_request:
+                path, astar_failure = grid.astar_with_reason(
+                    robot_xy, requested_world_xy,
+                    world_exclusion_zones=human_exclusion_zones,
+                )
+            if path is not None:
+                goal_world_xy = requested_world_xy.copy()
+            else:
+                path, goal_world_xy, astar_failure = grid.astar_to_goal_region(
+                    robot_xy, requested_world_xy, **astar_kwargs,
+                )
+                if relative_request and goal_world_xy is not None:
+                    progress = float(np.dot(
+                        goal_world_xy - robot_xy,
+                        (requested_world_xy - robot_xy) / np.linalg.norm(pointgoal),
+                    ))
+                    if progress < LOCOMOTION_MIN_STEP_DISTANCE_M:
+                        path, goal_world_xy, astar_failure = (
+                            None, None, "goal_region_no_progress"
+                        )
         # The exact endpoint is an already selected short execution prefix.
         # A second A* can reintroduce a tiny soft-cost corner and force a
         # table-side strafe. Preserve the direct chord whenever the unchanged
@@ -2353,7 +2372,7 @@ class NavigateToPointGoalHandler(_PointGoalValidator):
                 and not self._exact_endpoint
                 and not human_exclusion_zones
                 and astar_failure
-                not in {"measured_start_obstructed", "measured_departure_obstructed"}
+                not in {"measured_start_obstructed", "measured_departure_obstructed", "goal_region_no_progress"}
                 and self._x_navdp_backend is not None
             ):
                 return _prepare_x_navdp_navigation(
@@ -2661,7 +2680,9 @@ class NavigateToPointGoalHandler(_PointGoalValidator):
             content=(
                 f"A* resolved the relative PointGoal for "
                 f"{target_description!r}; phase={phase}, "
-                f"path remaining={remaining_m:.2f} m. Reassess from the fresh "
+                f"path remaining={remaining_m:.2f} m; "
+                f"requested distance={np.linalg.norm(pointgoal):.2f} m, "
+                f"resolved distance={np.linalg.norm(goal_world_xy - robot_xy):.2f} m. Reassess from the fresh "
                 "observation after this physical step."
             ),
             metadata={
