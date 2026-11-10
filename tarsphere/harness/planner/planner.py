@@ -79,6 +79,13 @@ class Planner:
         if bev is None:
             raise ValueError("Planner requires a BevMap instance.")
         self._bev = bev
+        scalar = 1.0 / float(bev.pixels_per_meter)
+        self._dx, self._dy = getattr(bev, "cell_size_xy_m", (scalar, scalar))
+        if not all(math.isfinite(v) and v > 0 for v in (self._dx, self._dy)):
+            raise ValueError("BEV metric cell spacing must be positive and finite.")
+        self._anisotropic = not math.isclose(
+            self._dx, self._dy, rel_tol=1e-5, abs_tol=1e-8
+        )
         self.diagonal = bool(diagonal)
         self.time_limit_s = float(time_limit_s)
         self.simplify = bool(simplify)
@@ -212,8 +219,13 @@ class Planner:
         if self._active_cost is None:
             # Treat the canvas exterior like any other blocked region. The
             # distance is additional clearance beyond the already inflated mask.
-            distance = distance_transform_edt(np.pad(nav, 1))[1:-1, 1:-1]
-            distance /= float(self._bev.pixels_per_meter)
+            if self._anisotropic:
+                distance = distance_transform_edt(
+                    np.pad(nav, 1), sampling=(self._dy, self._dx)
+                )[1:-1, 1:-1]
+            else:
+                distance = distance_transform_edt(np.pad(nav, 1))[1:-1, 1:-1]
+                distance /= float(self._bev.pixels_per_meter)
             self._active_cost = np.where(
                 nav,
                 1.0
@@ -412,7 +424,20 @@ class Planner:
                     "A positive clearance_radius_m requires bev.pixels_per_meter."
                 )
             radius_cells = int(math.ceil(self.clearance_radius_m * pixels_per_meter))
-            nav = erode_navigable_mask(nav, radius_cells)
+            if self._anisotropic:
+                ry, rx = (
+                    math.ceil(self.clearance_radius_m / self._dy),
+                    math.ceil(self.clearance_radius_m / self._dx),
+                )
+                yy, xx = np.ogrid[-ry : ry + 1, -rx : rx + 1]
+                footprint = (yy * self._dy) ** 2 + (
+                    xx * self._dx
+                ) ** 2 <= self.clearance_radius_m**2
+                from scipy.ndimage import binary_erosion
+
+                nav = binary_erosion(nav, structure=footprint, border_value=0)
+            else:
+                nav = erode_navigable_mask(nav, radius_cells)
         if self.cache_static_nav:
             self._embodiment_nav_cache = nav
         return nav
@@ -433,6 +458,26 @@ class Planner:
         for x, y, radius_m in self.world_exclusion_zones:
             center = self._bev.world_to_cell(np.asarray([[x, y]], dtype=float))[0]
             center_row, center_col = int(center[0]), int(center[1])
+            if self._anisotropic:
+                # Bound the exact world disk, including its sub-cell centre offset.
+                ry = math.ceil(radius_m / self._dy) + 1
+                rx = math.ceil(radius_m / self._dx) + 1
+                r0, r1 = (
+                    max(0, center_row - ry),
+                    min(blocked.shape[0], center_row + ry + 1),
+                )
+                c0, c1 = (
+                    max(0, center_col - rx),
+                    min(blocked.shape[1], center_col + rx + 1),
+                )
+                rr, cc = np.meshgrid(
+                    np.arange(r0, r1), np.arange(c0, c1), indexing="ij"
+                )
+                wx, wy = self._bev.cell_to_world_vec(rr, cc)
+                blocked[r0:r1, c0:c1][(wx - x) ** 2 + (wy - y) ** 2 <= radius_m**2] = (
+                    False
+                )
+                continue
             radius_cells = int(math.ceil(radius_m * pixels_per_meter))
             row_min = max(0, center_row - radius_cells)
             row_max = min(blocked.shape[0], center_row + radius_cells + 1)
@@ -638,6 +683,13 @@ class Planner:
             # consistent lower bound; membership, not the box, ends search.
             dr = max(min_r - r, 0, r - max_r)
             dc = max(min_c - c, 0, c - max_c)
+            if self._anisotropic:
+                k = min(dr, dc) if self.diagonal else 0
+                return (
+                    k * math.hypot(self._dx, self._dy)
+                    + (dr - k) * self._dy
+                    + (dc - k) * self._dx
+                )
             if self.diagonal:
                 # Octile distance.
                 return (_SQRT2 - 1.0) * min(dr, dc) + max(dr, dc)
@@ -669,7 +721,11 @@ class Planner:
                 if dr != 0 and dc != 0:
                     if not nav[r + dr, c] or not nav[r, c + dc]:
                         continue
-                step = _SQRT2 if (dr != 0 and dc != 0) else 1.0
+                step = (
+                    math.hypot(dr * self._dy, dc * self._dx)
+                    if self._anisotropic
+                    else (_SQRT2 if (dr != 0 and dc != 0) else 1.0)
+                )
                 ng = g + step * float((cost[r, c] + cost[nr, nc]) * 0.5)
                 if ng < best_g.get((nr, nc), math.inf):
                     best_g[(nr, nc)] = ng

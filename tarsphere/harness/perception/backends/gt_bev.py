@@ -96,6 +96,7 @@ class OfficialOccupancyBevMap(BevMap):
         span_y = float(self._y_axis[0] - self._y_axis[-1])
         span = max(span_x, span_y, 1e-6)
         cell_size = float(np.median(np.diff(self._x_axis)))
+        cell_y = float(np.median(-np.diff(self._y_axis)))
         axis_epsilon = (
             np.finfo(arr.dtype).eps if np.issubdtype(arr.dtype, np.floating) else 0.0
         )
@@ -112,9 +113,12 @@ class OfficialOccupancyBevMap(BevMap):
         if not np.allclose(
             np.diff(self._x_axis), cell_size, rtol=1e-5, atol=axis_roundoff
         ) or not np.allclose(
-            -np.diff(self._y_axis), cell_size, rtol=1e-5, atol=axis_roundoff
+            -np.diff(self._y_axis), cell_y, rtol=1e-5, atol=axis_roundoff
         ):
-            raise ValueError("Official occupancy requires uniform square metric cells.")
+            raise ValueError(
+                "Official occupancy requires uniform metric spacing on each axis."
+            )
+        self.cell_size_xy_m = (cell_size, cell_y)
         ppm = 1.0 / cell_size
         super().__init__(
             size_m=span / 2.0 + 1e-6,
