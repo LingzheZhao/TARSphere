@@ -1053,11 +1053,27 @@ class IsaacAutonomousEnv:
             if not route or math.dist(route[-1], target) > 1e-6:
                 raise ValueError("Live Robot-aware Human route must end at its target.")
             return route
+        from tarsphere.infra.control.physical_contracts import (
+            ROBOT_HUMAN_MOTION_CLEARANCE_M,
+        )
+
+        robot_position = self._robot_position()
+        if robot_position is None:
+            raise RobotPoseUnavailableError(
+                "Human route planning requires the live Robot position."
+            )
         planner = Planner(
             OfficialOccupancyBevMap(
                 occupancy_path=_compiled_occupancy_path(self.episode)
             ),
             clearance_radius_m=HUMAN_COLLISION_RADIUS_METERS,
+            world_exclusion_zones=[
+                (
+                    float(robot_position[0]),
+                    float(robot_position[1]),
+                    ROBOT_HUMAN_MOTION_CLEARANCE_M,
+                )
+            ],
             # Authoring certifies these static Human routes with a 30 s A*
             # budget. The generic 5 s online-navigation budget can expire
             # under full Isaac concurrency and report a reachable route as

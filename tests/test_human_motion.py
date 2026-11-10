@@ -308,3 +308,43 @@ def test_kinematic_route_must_reach_endpoint_before_symbolic_work():
     body.step(0.01)
     assert execute_human_task(episode, "Nora", action, body.get_state).executed
     assert body.position("Nora") == target
+
+
+def test_default_kinematic_route_keeps_live_robot_clearance_and_requires_pose(tmp_path):
+    import math
+    import numpy as np
+    from tarsphere.infra.simulation.isaac_env import (
+        IsaacAutonomousEnv,
+        RobotPoseUnavailableError,
+    )
+    from tarsphere.infra.control.physical_contracts import (
+        ROBOT_HUMAN_MOTION_CLEARANCE_M,
+    )
+
+    axis = np.linspace(-2.5, 2.5, 251, dtype=np.float32)
+    occupancy = np.ones((252, 252), dtype=np.float32)
+    occupancy[0, 1:] = axis
+    occupancy[1:, 0] = axis[::-1]
+    source = tmp_path / "occupancy.npy"
+    np.save(source, occupancy)
+    env = object.__new__(IsaacAutonomousEnv)
+    env.episode = SimpleNamespace(
+        world_knowledge={"scene_map": {"occupancy": str(source)}}
+    )
+    env._obs = {"position": [0.0, 0.0, 0.8]}
+    start, target = [-1.5, 0.0, 0.0], [1.5, 0.0, 0.0]
+    route = env._resolve_kinematic_human_route("Nora", start, target, {})
+    assert route[-1] == target
+    points = [start, *route]
+    for first, last in zip(points, points[1:]):
+        a = np.asarray(first[:2])
+        delta = np.asarray(last[:2]) - a
+        fraction = (
+            float(np.clip(-np.dot(a, delta) / np.dot(delta, delta), 0, 1))
+            if np.dot(delta, delta)
+            else 0
+        )
+        assert math.hypot(*(a + fraction * delta)) >= ROBOT_HUMAN_MOTION_CLEARANCE_M
+    env._obs = {}
+    with pytest.raises(RobotPoseUnavailableError):
+        env._resolve_kinematic_human_route("Nora", start, target, {})
