@@ -1379,6 +1379,13 @@ def run_evaluation_schedule(
                 )
                 del agent
                 gc.collect()
+        except BaseException:
+            # Kit's fast shutdown can terminate Python during env.close().
+            # Preserve the original failure before entering that cleanup.
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            raise
         finally:
             env.close()
     return all_results
