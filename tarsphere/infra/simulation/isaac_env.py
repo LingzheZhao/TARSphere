@@ -10758,6 +10758,11 @@ class IsaacAutonomousEnv:
         return ensure_material_deduped_usd(scene_usd)
 
     def _create_env(self):
+        # The official SDK import injects Kit's Python and native search paths
+        # before simulator extensions import carb. Runner creates the app later;
+        # keep this bootstrap local so importing this module needs no SDK.
+        from isaacsim import SimulationApp  # noqa: F401
+
         t_create_start = time.monotonic()
         t0 = time.monotonic()
 
