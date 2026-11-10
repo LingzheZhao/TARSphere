@@ -1107,6 +1107,7 @@ def worker_command(
     schedule_path: Path,
     *,
     evaluate_after_rollout: bool = True,
+    record_video: bool = False,
     harness_config=None,
 ) -> list[str]:
     command = [
@@ -1126,6 +1127,8 @@ def worker_command(
     ]
     if evaluate_after_rollout:
         command.append("--evaluate-after-rollout")
+    if record_video:
+        command.append("--record-video")
     if harness_config is None:
         from tarsphere.harness.harness import AgentHarnessConfig
 
@@ -1368,6 +1371,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--launch", action="store_true")
     parser.add_argument(
+        "--record-video",
+        action="store_true",
+        help="Record each episode's continuous robot camera and navigation maps.",
+    )
+    parser.add_argument(
         "--evaluate-after-rollout",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -1523,6 +1531,7 @@ def main(args: argparse.Namespace | None = None) -> None:
         git_head = ""
     plan = {
         "schema_version": "tarsphere.evaluation_plan.v7",
+        "record_video": args.record_video,
         "agent_harness_config": harness_config.as_dict(),
         "episode_input": str(args.episodes.resolve()),
         "episode_bindings": [
@@ -1918,6 +1927,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 command = worker_command(
                     schedule_path,
                     evaluate_after_rollout=args.evaluate_after_rollout,
+                    record_video=args.record_video,
                     harness_config=harness_config,
                 )
                 log_path = worker_dir / f"worker_launch_{launch_sequence}.log"
