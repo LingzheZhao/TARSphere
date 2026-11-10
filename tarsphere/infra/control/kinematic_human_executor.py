@@ -229,7 +229,8 @@ class UsdKinematicCharacters:
 
     def spawn(self, human: Any) -> None:
         from isaacsim.core.utils.semantics import add_update_semantics
-        from isaacsim.replicator.agent.core.stage_util import CharacterUtil
+        from isaacsim.core.utils.prims import create_prim
+        import omni.usd
 
         from tarsphere.humans.character_catalog import resolve_character_usd
 
@@ -243,11 +244,21 @@ class UsdKinematicCharacters:
             human.character_name or self._default_character,
             character_assets_root=self._assets_path,
         )
-        prim = CharacterUtil.load_character_usd_to_stage(
-            str(asset),
-            list(human.start_position),
-            0,
-            str(human.id),
+        # IRA 1.x removed its old CharacterUtil.  The author's kinematic
+        # backend only needs its USD reference and initial transform, not an
+        # IRA behavior agent, motion library or animation graph.
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            raise RuntimeError("Kinematic Human spawn requires a live USD stage")
+        character_path = omni.usd.get_stage_next_free_path(
+            stage, f"/World/Characters/{human.id}", False
+        )
+        prim = create_prim(
+            character_path,
+            "Xform",
+            usd_path=str(asset),
+            position=list(human.start_position),
+            orientation=[1.0, 0.0, 0.0, 0.0],
         )
         if prim is None or not prim.IsValid():
             raise RuntimeError(f"Could not spawn kinematic Human {human.id}")
