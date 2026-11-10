@@ -445,6 +445,23 @@ def main() -> int:
     formal_episodes = [
         episode for _, episode in load_episode_inputs(args.episodes, args.episode_id)
     ]
+    from tarsphere.evaluation.official import validate_formal_episode_runtime
+
+    budget_errors = []
+    for episode in formal_episodes:
+        try:
+            validate_formal_episode_runtime(episode)
+        except ValueError as exc:
+            budget_errors.append(str(exc))
+    checks.append(
+        Verification(
+            "Selected episodes preserve the formal runtime limits",
+            not budget_errors,
+            "; ".join(budget_errors)
+            if budget_errors
+            else f"{len(formal_episodes)} episodes",
+        )
+    )
     expected_scene_count = len(
         {episode.scene.asset_path for episode in formal_episodes}
     )
