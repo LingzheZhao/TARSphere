@@ -104,3 +104,20 @@ def test_service_dry_run_matches_grasp_client(monkeypatch, tmp_path, override):
     expected = int(override) if override else GraspGenXSettings().port
     assert f"GraspGenX 127.0.0.1:{expected}" in result.stdout
     assert "SAM3 127.0.0.1:5558" in result.stdout
+
+def test_xnavdp_client_root_required(monkeypatch):
+    monkeypatch.delenv('TARSPHERE_XNAVDP_ROOT', raising=False)
+    check = preflight.xnavdp_client_verification()
+    assert not check.passed
+    assert check.required
+
+
+def test_xnavdp_valid_client_root(monkeypatch, tmp_path):
+    client = tmp_path / 'eval/src/client_utils.py'
+    client.parent.mkdir(parents=True)
+    client.touch()
+    monkeypatch.setenv('TARSPHERE_XNAVDP_ROOT', str(tmp_path))
+    monkeypatch.delenv('TARSPHERE_XNAVDP_PORT', raising=False)
+    assert preflight.xnavdp_client_verification().passed
+    client.unlink()
+    assert not preflight.xnavdp_client_verification().passed

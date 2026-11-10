@@ -325,6 +325,16 @@ def graspgenx_asset_verification() -> Verification:
     )
 
 
+def xnavdp_client_verification() -> Verification:
+    from tarsphere.infra.navigation.x_navdp import XNavDPSettings
+
+    try:
+        settings = XNavDPSettings.from_environment()
+    except (RuntimeError, ValueError, FileNotFoundError) as error:
+        return Verification("Official X-NavDP client configuration is valid", False, str(error))
+    return Verification("Official X-NavDP client configuration is valid", True, settings.root)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from tarsphere.cli.episode_inputs import DEFAULT_EPISODES, load_episode_inputs
@@ -539,6 +549,8 @@ def main() -> int:
             "; ".join(robot_asset_issues) if robot_asset_issues else "valid",
         )
     )
+
+    checks.append(xnavdp_client_verification())
 
     checkpoint_variables = (
         "TARSPHERE_SAM3_CHECKPOINT",

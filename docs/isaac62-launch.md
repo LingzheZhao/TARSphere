@@ -16,6 +16,10 @@ container; the service launcher checks that it belongs to the caller's
 The scheduler's host device number can differ from the container's index.
 XNavDP forwards `TARSPHERE_MODEL_GPU` directly to its `CUDA_VISIBLE_DEVICES`.
 
+Export `TARSPHERE_XNAVDP_ROOT` to the provisioned official X-NavDP checkout
+(containing `eval/src/client_utils.py`) in the parent environment. The server
+script's default path does not configure the worker client.
+
 From the repository root, with `TARSPHERE_PYTHON` set to the SDK interpreter:
 
 ```bash
