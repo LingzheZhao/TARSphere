@@ -594,10 +594,10 @@ def recover_missing_collection_materials(
         *sibling_material_donors(scene_path),
         *stock_material_donors(),
     ]
-    if extra_donors is not None:
-        donors.extend(
-            Path(item).resolve() for item in extra_donors if Path(item).is_dir()
-        )
+    additional_donors = [
+        Path(item).resolve() for item in (extra_donors or ()) if Path(item).is_dir()
+    ]
+    donors.extend(additional_donors)
 
     recovered_mdl: list[str] = []
     recovered_textures: list[str] = []
@@ -629,24 +629,51 @@ def recover_missing_collection_materials(
             )
             continue
         still_missing.append(name)
-    mdl_to_scan = [
-        materials / name for name in sorted(used_mdls) if (materials / name).is_file()
-    ]
-
+    # Relative imports must exist beside the importing module. SDK search
+    # paths cannot satisfy .:: imports; only collection donors can repair them.
+    relative_donors = list(sibling_material_donors(scene_path))
+    relative_donors.extend(additional_donors)
+    pending = sorted(used_mdls)
+    scanned: set[str] = set()
     missing_textures: list[str] = []
-    for mdl_path in mdl_to_scan:
+    while pending:
+        name = pending.pop()
+        if name in scanned:
+            continue
+        scanned.add(name)
+        mdl_path = materials / name
         if not mdl_path.is_file():
             continue
-        for rel in _texture_refs_in_mdl(mdl_path):
+        text = mdl_path.read_text(encoding="utf-8", errors="ignore")
+        # GRScenes uses `using .::Module import *;` (also nested :: paths).
+        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
+        imports = re.findall(
+            r"\busing\s+\.::([A-Za-z_][A-Za-z_0-9]*(?:::[A-Za-z_][A-Za-z_0-9]*)*)\s+import\b",
+            text,
+        )
+        for module in imports:
+            rel = str(Path(name).parent / (module.replace("::", "/") + ".mdl"))
             dest = materials / rel
+            if not dest.is_file():
+                source = next((d / rel for d in relative_donors if (d / rel).is_file()), None)
+                if source is None:
+                    if rel not in still_missing:
+                        still_missing.append(rel)
+                    continue
+                _copy_file(source, dest)
+                recovered_mdl.append(rel)
+            pending.append(rel)
+        for rel in _texture_refs_in_mdl(mdl_path):
+            texture_rel = str(Path(name).parent / rel)
+            dest = materials / texture_rel
             if dest.is_file():
                 continue
-            source = _find_on_donors(rel, donors)
+            source = _find_on_donors(texture_rel, donors)
             if source is None:
-                missing_textures.append(f"{mdl_path.name}:{rel}")
+                missing_textures.append(f"{name}:{rel}")
                 continue
             _copy_file(source, dest)
-            recovered_textures.append(rel)
+            recovered_textures.append(texture_rel)
 
     if recovered_mdl or recovered_textures:
         print(

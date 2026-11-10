@@ -88,3 +88,10 @@ benchmark milestones, or estimate agent-policy performance. Speech admission and
 proximity alone are not recorded as confirmed robot receipt. Captured arrays,
 poses, available contact-monitor readings and partial outcomes remain outside
 the source tree. This diagnostic still requires physical validation.
+
+The first full-scene attempts exposed missing textures and relative MDL imports,
+then the removed `add_update_semantics` API during character creation. Material
+preparation now follows relative module dependencies and their textures; missing
+dependencies must be supplied by the original collection. Character identities
+use the USD `LabelsAPI` read by Isaac Sim 6.2. A warmup camera frame from a scene
+with shader compilation errors does not establish a valid visual observation.

@@ -227,8 +227,14 @@ class UsdKinematicCharacters:
         self._owned_paths.clear()
         self._scene_bound_ids.clear()
 
+    @staticmethod
+    def _apply_identity_label(prim: Any, human_id: str) -> None:
+        """Use the USD LabelsAPI consumed by Isaac Sim 6.2 annotators."""
+        from pxr import UsdSemantics
+
+        UsdSemantics.LabelsAPI.Apply(prim, "class").CreateLabelsAttr().Set([human_id])
+
     def spawn(self, human: Any) -> None:
-        from isaacsim.core.utils.semantics import add_update_semantics
         from isaacsim.core.utils.prims import create_prim
         import omni.usd
 
@@ -236,7 +242,7 @@ class UsdKinematicCharacters:
 
         source_path = str(getattr(human, "scene_person_prim_path", "") or "").strip()
         if source_path:
-            self._bind_scene_person(human, source_path, add_update_semantics)
+            self._bind_scene_person(human, source_path)
             return
         if not self._assets_path:
             raise RuntimeError("Kinematic Human character asset root is not configured")
@@ -264,7 +270,7 @@ class UsdKinematicCharacters:
             raise RuntimeError(f"Could not spawn kinematic Human {human.id}")
         self._paths[str(human.id)] = str(prim.GetPath())
         self._owned_paths.add(str(prim.GetPath()))
-        add_update_semantics(prim, str(human.id), "class")
+        self._apply_identity_label(prim, str(human.id))
         self._apply_static_idle_pose(str(human.id), prim)
 
     def _apply_static_idle_pose(self, human_id: str, root_prim: Any) -> None:
@@ -339,9 +345,7 @@ class UsdKinematicCharacters:
                 f"Could not bind the static idle pose for kinematic Human {human_id!r}."
             )
 
-    def _bind_scene_person(
-        self, human: Any, source_path: str, add_semantics: Any
-    ) -> None:
+    def _bind_scene_person(self, human: Any, source_path: str) -> None:
         import omni.usd
         import numpy as np
         from tarsphere.infra.control.scene_person_geometry import (
@@ -374,7 +378,7 @@ class UsdKinematicCharacters:
                 f"expected_max={expected_max.tolist()} "
                 f"actual_min={actual_min.tolist()} actual_max={actual_max.tolist()}"
             )
-        add_semantics(prim, str(human.id), "class")
+        self._apply_identity_label(prim, str(human.id))
         human_id = str(human.id)
         self._paths[human_id] = runtime_path
         self._scene_bound_ids.add(human_id)
