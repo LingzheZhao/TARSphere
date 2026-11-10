@@ -95,3 +95,23 @@ preparation now follows relative module dependencies and their textures; missing
 dependencies must be supplied by the original collection. Character identities
 use the USD `LabelsAPI` read by Isaac Sim 6.2. A warmup camera frame from a scene
 with shader compilation errors does not establish a valid visual observation.
+
+A subsequent attempt captured Nora in the robot camera and registered a real
+model-selected text response, then stopped before movement because the released
+occupancy map has different X and Y cell spacing. The planner now uses those
+actual spacings for distance, clearance and A* costs, preserving the existing
+square-grid behavior. Default kinematic routes also avoid the live robot using
+the author's existing robot–human motion clearance. CPU queries on the released
+map reach both exact destinations with that exclusion; actual execution remains
+to be verified.
+
+Texture inputs now use resolved absolute paths. Computing relative paths from
+canonical directories failed when USD opened the same layers through symlink
+aliases at another directory depth. A real USD composition regression covers
+that failure. The focused CPU suite passes 89 tests.
+
+The diagnostic separately records the author step counter, World clock and
+PhysX post-step callbacks. In the observed 6.2 condition their readings differ;
+the World clock accumulates callback step sizes. Neither counter is treated as
+independent evidence of the robot scene's integration time. The diagnostic's
+time bounds and control sequence remain unchanged.
