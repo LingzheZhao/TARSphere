@@ -10,6 +10,11 @@ Model services can use separate interpreters through `TARSPHERE_SAM3_PYTHON`,
 `TARSPHERE_GRASPGENX_PYTHON`, and `TARSPHERE_XNAVDP_PYTHON`. Set these to the pinned
 model environment; leave the simulator's NumPy installation untouched.
 
+`TARSPHERE_MODEL_SERVICE_GPU` is a physical GPU index; the service launcher
+checks that it belongs to the caller's `CUDA_VISIBLE_DEVICES` allocation.
+Resolve that index from the allocated device, rather than assuming index zero.
+XNavDP forwards `TARSPHERE_MODEL_GPU` directly to its `CUDA_VISIBLE_DEVICES`.
+
 From the repository root, with `TARSPHERE_PYTHON` set to the SDK interpreter:
 
 ```bash

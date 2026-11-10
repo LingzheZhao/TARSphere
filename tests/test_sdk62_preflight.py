@@ -64,3 +64,43 @@ def test_default_grasp_paths(monkeypatch, tmp_path):
         )
         in check.observed
     )
+
+
+@pytest.mark.parametrize("override", [None, "5557"])
+def test_service_dry_run_matches_grasp_client(monkeypatch, tmp_path, override):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    from tarsphere.infra.manipulation.graspgenx import GraspGenXSettings
+
+    env = os.environ.copy()
+    for key in (
+        "CUDA_VISIBLE_DEVICES",
+        "TARSPHERE_GRASPGENX_PORT",
+        "TARSPHERE_SAM3_PORT",
+        "TARSPHERE_GRASPGENX_HOST",
+        "TARSPHERE_SAM3_HOST",
+    ):
+        env.pop(key, None)
+    checkpoint = tmp_path / "sam.pt"
+    checkpoint.touch()
+    env.update(
+        TARSPHERE_PYTHON=sys.executable,
+        TARSPHERE_GRASPGENX_PYTHON=sys.executable,
+        TARSPHERE_SAM3_CHECKPOINT=str(checkpoint),
+        TARSPHERE_MODEL_SERVICE_STATE_DIR=str(tmp_path / "state"),
+    )
+    if override:
+        env["TARSPHERE_GRASPGENX_PORT"] = override
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        ["bash", str(root / "tarsphere/infra/services/start.sh"), "--dry-run"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    expected = int(override) if override else GraspGenXSettings().port
+    assert f"GraspGenX 127.0.0.1:{expected}" in result.stdout
+    assert "SAM3 127.0.0.1:5558" in result.stdout
