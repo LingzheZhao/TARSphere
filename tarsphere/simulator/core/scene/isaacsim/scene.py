@@ -33,6 +33,15 @@ class IsaacsimScene(IScene):
             scale=task_config.scene_scale,
             translation=position,
         )
+        # Prepare immutable geometry before BaseTask constructs dynamic-body
+        # wrappers. Wrapping mirrored furniture first can decompose reflected
+        # transforms and fail even though its static collision mesh is valid.
+        if task_config.scene_static:
+            from pxr import Usd
+
+            prepare_static_scene_bodies(
+                Usd.PrimRange.AllPrims(scene_prim), task_config.scene_dynamic_body_paths
+            )
         self.scene_prim = scene_prim
 
     def add(self, target: any):
@@ -65,3 +74,21 @@ class IsaacsimScene(IScene):
     def unwrap(self):
         """See `IScene.unwrap` for documentation."""
         return self._scene
+
+
+def prepare_static_scene_bodies(prims, dynamic_body_paths):
+    """Disable immutable body dynamics without changing transforms or collisions."""
+    dynamic_paths = tuple(path.rstrip("/") for path in dynamic_body_paths)
+    made_static = preserved_dynamic = 0
+    for prim in prims:
+        enabled = prim.GetAttribute("physics:rigidBodyEnabled")
+        if not enabled or not enabled.IsValid() or not enabled.Get():
+            continue
+        path = str(prim.GetPath())
+        if any(path == root or path.startswith(root + "/") for root in dynamic_paths):
+            preserved_dynamic += 1
+            continue
+        if not enabled.Set(False):
+            raise RuntimeError(f"Cannot disable immutable scene body {path}")
+        made_static += 1
+    return made_static, preserved_dynamic

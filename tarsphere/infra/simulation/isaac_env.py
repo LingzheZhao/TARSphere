@@ -1884,25 +1884,13 @@ class IsaacAutonomousEnv:
             if obj.pickable
         )
 
-        made_static = 0
-        preserved_dynamic = 0
-        for prim in Usd.PrimRange.AllPrims(scene_root):
-            attr = prim.GetAttribute("physics:rigidBodyEnabled")
-            enabled = bool(attr.Get()) if attr and attr.IsValid() else False
-            if not enabled:
-                continue
-            prim_path = str(prim.GetPath())
-            if any(
-                prim_path == path or prim_path.startswith(path + "/")
-                for path in dynamic_object_paths
-            ):
-                preserved_dynamic += 1
-                continue
-            if not attr.Set(False):
-                raise RuntimeError(
-                    f"Cannot disable rigid-body dynamics for {prim_path}."
-                )
-            made_static += 1
+        from tarsphere.simulator.core.scene.isaacsim.scene import (
+            prepare_static_scene_bodies,
+        )
+
+        made_static, preserved_dynamic = prepare_static_scene_bodies(
+            Usd.PrimRange.AllPrims(scene_root), dynamic_object_paths
+        )
 
         self._static_scene_bodies_prepared = True
         print(
@@ -10874,6 +10862,10 @@ class IsaacAutonomousEnv:
             sensors=sensors,
         )
 
+        from tarsphere.infra.manipulation.g1_attachment import (
+            manipulation_objects_from_episode,
+        )
+
         config = Config(
             simulator=SimConfig(
                 physics_dt=1.0 / SIMULATION_PHYSICS_HZ,
@@ -10891,6 +10883,12 @@ class IsaacAutonomousEnv:
             task_configs=[
                 SingleInferenceTaskCfg(
                     scene_asset_path=str(scene_usd),
+                    scene_static=True,
+                    scene_dynamic_body_paths=[
+                        obj.prim_path
+                        for obj in manipulation_objects_from_episode(self.episode)
+                        if obj.pickable
+                    ],
                     scene_scale=self.episode.scene.scale,
                     robots=[robot],
                     objects=[],
