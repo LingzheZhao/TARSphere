@@ -63,3 +63,28 @@ are diagnostics, not policy changes. Original G1 weights, control interval and
 120-step criterion are unchanged. The verified result covers cold and resident
 resets, standing control and three fresh RGB-D observations. Populated NPC casts,
 full navigation/social tasks and manipulation remain untested by this check.
+
+## Nora component diagnostic
+
+The separate `studies/nora_component_diagnostic.yaml` selects the author's task-update
+scene and public Nora fact. It holds the G1 with its original policy and commands
+Nora along two authored destinations through the existing occupancy planner.
+The default NPC backend translates the character root with an idle skeleton;
+this is not animated walking. The diagnostic ends when both routes complete or
+the configured time limit is reached. It records the author's step counter and
+the simulator clock separately.
+
+With the complete scene, character, material and occupancy assets prepared and
+the support-model endpoint configured, run from the repository root:
+
+```sh
+python studies/nora_component_diagnostic.py \
+  --config studies/nora_component_diagnostic.yaml --output /absolute/new-diagnostic
+```
+
+The diagnostic uses real model fact selection and actual human-body command
+admission. It does not install the episode runner's robot-heard inbox, assign
+benchmark milestones, or estimate agent-policy performance. Speech admission and
+proximity alone are not recorded as confirmed robot receipt. Captured arrays,
+poses, available contact-monitor readings and partial outcomes remain outside
+the source tree. This diagnostic still requires physical validation.
