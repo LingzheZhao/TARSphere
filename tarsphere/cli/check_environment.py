@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib import metadata
 import os
 import shutil
 import subprocess
@@ -274,10 +275,22 @@ def _formal_episode_material_dependencies(
     return len(dependencies), missing
 
 
+def installed_sdk62_verification() -> Verification:
+    """Read installed SDK identity; missing metadata must fail closed."""
+    try:
+        version = metadata.version("isaacsim")
+    except metadata.PackageNotFoundError:
+        version = "missing installed isaacsim distribution"
+    return Verification(
+        "Installed Isaac Sim SDK is 6.2", version.startswith("6.2."), version
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from tarsphere.cli.episode_inputs import DEFAULT_EPISODES, load_episode_inputs
 
+    parser.add_argument("--runtime", choices=("isaac51", "isaac62"), default="isaac51")
     parser.add_argument("--episodes", type=Path, default=DEFAULT_EPISODES)
     parser.add_argument("--episode-id", action="append")
     parser.add_argument(
@@ -286,6 +299,8 @@ def main() -> int:
         help="Also validate continuous-video BEV map assets",
     )
     args = parser.parse_args()
+    sdk62 = args.runtime == "isaac62"
+    expected_python = (3, 12) if sdk62 else (3, 11)
     minimum_cores, minimum_memory = SINGLE_SERVER_CAPACITY
     if str(REPOSITORY_ROOT) not in sys.path:
         sys.path.insert(0, str(REPOSITORY_ROOT))
@@ -304,8 +319,8 @@ def main() -> int:
     )
     checks.append(
         Verification(
-            "Python is 3.11",
-            sys.version_info[:2] == (3, 11),
+            f"Python is {expected_python[0]}.{expected_python[1]}",
+            sys.version_info[:2] == expected_python,
             sys.version.split()[0],
         )
     )
@@ -367,14 +382,17 @@ def main() -> int:
         if isaac_version_path.is_file()
         else "missing"
     )
-    checks.append(
-        Verification(
-            "ISAAC_SIM_PATH contains Isaac Sim 5.1 standalone",
-            isaac_version.startswith("5.1.")
-            and (isaac_root / "setup_conda_env.sh").is_file(),
-            f"{isaac_root} ({isaac_version})",
+    if sdk62:
+        checks.append(installed_sdk62_verification())
+    else:
+        checks.append(
+            Verification(
+                "ISAAC_SIM_PATH contains Isaac Sim 5.1 standalone",
+                isaac_version.startswith("5.1.")
+                and (isaac_root / "setup_conda_env.sh").is_file(),
+                f"{isaac_root} ({isaac_version})",
+            )
         )
-    )
 
     simulator_issues = runtime_issues()
     checks.append(
