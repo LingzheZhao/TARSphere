@@ -286,6 +286,45 @@ def installed_sdk62_verification() -> Verification:
     )
 
 
+def graspgenx_asset_verification() -> Verification:
+    default_root = (
+        REPOSITORY_ROOT
+        / "third_party"
+        / "GraspGenX"
+        / "ext"
+        / "graspgenx_checkpoints"
+        / "release"
+    )
+    default_assets = (
+        REPOSITORY_ROOT
+        / "third_party"
+        / "GraspGenX"
+        / "ext"
+        / "gripper_descriptions"
+        / "gripper_descriptions"
+        / "assets"
+    )
+    grasp_root = Path(
+        os.environ.get("TARSPHERE_GRASPGENX_CHECKPOINT_ROOT") or default_root
+    ).expanduser()
+    grasp_assets = Path(
+        os.environ.get("TARSPHERE_GRASPGENX_GRIPPER_ASSETS") or default_assets
+    ).expanduser()
+    return Verification(
+        "GraspGenX checkpoint and gripper assets are present",
+        all(
+            (
+                (grasp_root / "gen" / "config.yaml").is_file(),
+                (grasp_root / "dis" / "config.yaml").is_file(),
+                bool(list((grasp_root / "gen").glob("epoch_*.pth"))),
+                bool(list((grasp_root / "dis").glob("epoch_*.pth"))),
+                grasp_assets.is_dir(),
+            )
+        ),
+        f"checkpoints={grasp_root}; grippers={grasp_assets}",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from tarsphere.cli.episode_inputs import DEFAULT_EPISODES, load_episode_inputs
@@ -502,38 +541,7 @@ def main() -> int:
         )
     )
 
-    grasp_root = (
-        REPOSITORY_ROOT
-        / "third_party"
-        / "GraspGenX"
-        / "ext"
-        / "graspgenx_checkpoints"
-        / "release"
-    )
-    grasp_assets = (
-        REPOSITORY_ROOT
-        / "third_party"
-        / "GraspGenX"
-        / "ext"
-        / "gripper_descriptions"
-        / "gripper_descriptions"
-        / "assets"
-    )
-    checks.append(
-        Verification(
-            "GraspGenX checkpoint and gripper assets are present",
-            all(
-                (
-                    (grasp_root / "gen" / "config.yaml").is_file(),
-                    (grasp_root / "dis" / "config.yaml").is_file(),
-                    bool(list((grasp_root / "gen").glob("epoch_*.pth"))),
-                    bool(list((grasp_root / "dis").glob("epoch_*.pth"))),
-                    grasp_assets.is_dir(),
-                )
-            ),
-            f"checkpoints={grasp_root}; grippers={grasp_assets}",
-        )
-    )
+    checks.append(graspgenx_asset_verification())
 
     if asset_root.is_dir():
         free_storage_gib = shutil.disk_usage(asset_root).free / (1024**3)
