@@ -222,16 +222,42 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
             position = [float(v) for v in human.start_position]
             path = f'/World/Characters/{human_id}/behavior_{self._spawn_epoch}'
             asset = self._resolve_character_usd(self._resolve_character_name(getattr(human, 'character_name', None)))
-            ok, _ = omni.kit.commands.execute('CreateBehaviorAgentCommand',
-                character_prim_path=Sdf.Path(path), character_asset_url=str(asset),
-                motion_library_prim_path=Sdf.Path('/World/Characters/HumanMotionLibrary'),
-                motion_library_asset_url=self._behavior_library_path,
-                motion_library_skeleton_rig='Human', position=Gf.Vec3d(*(v/scale for v in position)))
-            if not ok:
-                raise RuntimeError(f'Isaac CreateBehaviorAgentCommand failed for {human_id}')
-            roots = [p for p in Usd.PrimRange(stage.GetPrimAtPath(path)) if p.IsA(UsdSkel.Root)]
+            # Match the author's named actor parent. Compose and load the exact
+            # catalog payload before the SDK applies BehaviorAgentAPI; its
+            # convenience command traverses immediately after payload creation.
+            UsdGeom.Xform.Define(stage, f'/World/Characters/{human_id}')
+            character = UsdGeom.Xform.Define(stage, path).GetPrim()
+            if not character.GetPayloads().AddPayload(str(asset)):
+                raise RuntimeError(f'Cannot compose original character payload for {human_id}: {asset}')
+            stage.Load(path)
+            if not UsdGeom.XformCommonAPI(character).SetTranslate(Gf.Vec3d(*(v/scale for v in position))):
+                raise RuntimeError(f'Cannot author initial character placement for {human_id}')
+            roots = [p for p in Usd.PrimRange(character) if p.IsA(UsdSkel.Root)]
             if len(roots) != 1:
-                raise RuntimeError(f'Expected one behavior character SkelRoot for {human_id}, got {len(roots)}')
+                raise RuntimeError(f'Expected one loaded catalog SkelRoot for {human_id}, got {len(roots)}')
+            skeletons = [p for p in Usd.PrimRange(roots[0]) if p.IsA(UsdSkel.Skeleton)]
+            if len(skeletons) != 1 or not UsdSkel.Skeleton(skeletons[0]).GetJointsAttr().Get():
+                raise RuntimeError(f'Expected one populated catalog Skeleton for {human_id}')
+            library_path = Sdf.Path('/World/Characters/HumanMotionLibrary')
+            library = stage.GetPrimAtPath(library_path)
+            if not library:
+                library = stage.DefinePrim(library_path)
+                if not library.GetPayloads().AddPayload(self._behavior_library_path):
+                    raise RuntimeError('Cannot compose the staged behavior motion library')
+            stage.Load(library_path)
+            import omni.anim.behavior.schema as behavior_schema
+            if not library.IsA(behavior_schema.BEHAVIOR_MOTION_LIBRARY):
+                raise RuntimeError('Loaded motion-library payload is not an Isaac BehaviorMotionLibrary')
+            # This is the same public SDK command used inside
+            # CreateBehaviorAgentCommand after its payload traversal succeeds.
+            ok, _ = omni.kit.commands.execute('ApplyBehaviorAgentAPICommand',
+                skelroot_prim_paths=[roots[0].GetPath()],
+                motion_library_prim_path=library_path,
+                motion_library_skeleton_rig='Human')
+            if not ok or not roots[0].HasAPI(behavior_schema.BEHAVIOR_AGENT_API):
+                raise RuntimeError(f'Isaac ApplyBehaviorAgentAPICommand failed for {human_id}')
+            if list(roots[0].GetRelationship('behavior:motionLibrary').GetTargets()) != [library_path]:
+                raise RuntimeError(f'Isaac behavior motion-library binding is missing for {human_id}')
             skelroot = str(roots[0].GetPath())
             self._character_prim_paths[human_id] = path
             self._character_skelroot_paths[human_id] = skelroot

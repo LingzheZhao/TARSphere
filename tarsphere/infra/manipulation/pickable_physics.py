@@ -67,7 +67,9 @@ def reset_rigid_body_to_authored_pose(stage: Any, prim_path: str, *, world: Any)
     )
     backend = world.backend_utils
     device = world.device
-    indices = backend.convert(np.asarray([0], dtype=np.uint32), device=device, dtype="uint32")
+    # Match the core rigid-prim index path; backend.convert does not support
+    # uint32 in Isaac 6.2 (it silently returns None).
+    indices = backend.resolve_indices([0], body.count, device=device)
     native_pose = backend.convert(pose, device=device, dtype="float32")
     body.set_transforms(native_pose, indices)
     rigid_body = UsdPhysics.RigidBodyAPI(prim)
