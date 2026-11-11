@@ -212,9 +212,18 @@ Declared pickables loaded from `scene_static` are normalized as held kinematic
 rigid bodies before the first physics advance, including scene baking. The
 ordinary grasp lifecycle subsequently controls their physical release. This
 prevents initialization from dropping objects before the test begins; it does
-not establish successful contact, retention, lift or transport. Manipulation
-remains blocked by infrastructure failures; no physical grasp success has been
-validated in this Isaac 6.2 condition.
+not establish successful contact, retention, lift or transport. The fixed-stance
+table run subsequently reached candidate planning but found no IK solution for
+that batch; it executed no arm trajectory.
+
+The unchanged published Fetch Base task at `ca1324c` completed with 6.1 Sol
+through Codex, Qwen3-4B support and an RTX 3090: 5/5 after 28 decisions/actions.
+Its recorded sequence includes physical hand–object contact, transport and
+Marcus accepting a handover offer after two out-of-reach replies. The object
+was kinematic during reach and remained held at the end; this is not release
+into a human hand. There were no recorded falls or drops, but scene contact
+remained. Three videos and the final evaluator result passed independent checks.
+[Conditions and retained failures](https://github.com/LingzheZhao/humanoid-office/blob/codex/bootstrap/docs/results/interaction.md#completed-published-fetch-and-deliver).
 
 ## Published benchmark definitions
 

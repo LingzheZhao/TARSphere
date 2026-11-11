@@ -57,7 +57,8 @@ For animated characters, stage the SDK `HumanMotionLibrary.usd` and export
 `TARSPHERE_BEHAVIOR_MOTION_LIBRARY` to that file. Isaac 6.2 uses the SDK behavior
 agent when the legacy People extension is absent. GoTo, Idle, Listen and
 speech are implemented; other action requests fail explicitly. The composed
-GoTo final-facing lifecycle has CPU checks but remains unverified in simulation. See
+The installed 110.4 move-to binding does not accept final facing; GoTo with that
+request is rejected. Standalone idle-facing has separate measured evidence. See
 [character and manipulation limits](ISAAC_SIM_6_2.md#isaac-62-character-execution).
 
 Provision Shapely 2.2 with constrained Delaunay support, `manifold3d==3.5.2`
