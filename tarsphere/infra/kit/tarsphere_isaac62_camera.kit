@@ -7,6 +7,11 @@ version = "0.1.0"
 "isaacsim.core.utils" = {}
 "isaacsim.robot.schema" = {}
 "isaacsim.sensors.camera" = {}
+# Register codeless schemas and stage-update clients before World creates the
+# stage. Enabling this stack from reset is too late for USD schema discovery.
+"omni.anim.navigation.schema" = {}
+"omni.anim.navigation.core" = {}
+"omni.anim.behavior.core" = {}
 
 [settings]
 # The supplied Lab camera experience excludes the deprecated Warp extension.

@@ -36,7 +36,6 @@ def main():
     configure_cuda_allocator()
     import numpy as np
     from PIL import Image
-    from pxr import Usd, UsdGeom, UsdSkel
     from tarsphere.bench.case_loader import BenchmarkCaseLoader
     from tarsphere.infra.simulation.isaac_env import IsaacAutonomousEnv, RenderMode
     from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor, behavior_limb_pose
@@ -54,6 +53,8 @@ def main():
             raise RuntimeError('This diagnostic requires the installed Isaac 6.x behavior animation API')
         env._human_body._capture_native_motion_trace = True
         env.reset(skip_navmesh=False)
+        # Match worker startup: SimulationApp/Kit own USD before study queries.
+        from pxr import Usd, UsdGeom, UsdSkel
         human_id = config['human_id']
         body = env._human_body
         stage = env._env.runner._world.stage
