@@ -1,0 +1,14 @@
+# Offline positive visibility controls; resets never count as navigation.
+episode: episodes/case/navigate_and_report/task_update.yaml
+target_object_id: bottle/model_8706a0faaed0dbfdea138d3f173c0de7_0
+poses:
+- label: author_bedroom_target_facing
+  xy_yaw:
+  - 2.597672700881958
+  - 2.653996229171753
+  - 3.131830554316253
+- label: terra_search_target_facing
+  xy_yaw:
+  - 3.1821
+  - 1.5508
+  - 2.4421876968966663

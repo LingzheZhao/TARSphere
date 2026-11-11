@@ -72,6 +72,7 @@ def main():
             row['evaluator_visibility'] = env.evaluate_visual_object_visibility(object_ids=(target,))
             row['camera_params'] = observation['camera_params']
             row['depth_status'] = observation.get('depth_status')
+            (args.output / f'{label}_measurement.json').write_text(json.dumps(row, default=json_value, indent=2))
             runtime = _NativeCapture(env)
             try:
                 row['camera'] = runtime.prepare((640, 480), True)
@@ -80,6 +81,7 @@ def main():
                 row['instance_labels'] = labels
                 row['target_visible_pixels'] = sum(int((ids == int(k)).sum()) for k, v in labels.items() if target in str(v))
                 Image.fromarray(rgb).save(args.output / f'{label}_segmentation_rgb.png')
+                (args.output / f'{label}_measurement.json').write_text(json.dumps(row, default=json_value, indent=2))
             finally:
                 runtime.close()
             row['target_geometry'] = []
@@ -88,7 +90,9 @@ def main():
             cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ['default', 'render', 'proxy'])
             for prim in matches:
                 box = cache.ComputeWorldBound(prim).ComputeAlignedRange()
-                corners = [box.GetCorner(i) for i in range(8)]
+                from itertools import product
+                from pxr import Gf
+                corners = [Gf.Vec3d(*v) for v in product(*zip(box.GetMin(), box.GetMax()))]
                 projected = [view_projection.Transform(p) for p in corners]
                 row['target_geometry'].append({'path': str(prim.GetPath()),
                     'world_bbox_min': list(box.GetMin()), 'world_bbox_max': list(box.GetMax()),
@@ -97,7 +101,7 @@ def main():
                     'projected_in_frame_corner': any(abs(p[0]) <= 1 and abs(p[1]) <= 1 and -1 <= p[2] <= 1 for p in projected),
                     'physics_prims': [{'path': str(p.GetPath()), 'rigid_body': p.HasAPI(UsdPhysics.RigidBodyAPI),
                         'collision': p.HasAPI(UsdPhysics.CollisionAPI),
-                        'attributes': {a.GetName(): a.Get() for a in p.GetAttributes() if a.GetName().startswith('physics:')}}
+                        'attributes': {a.GetName(): {'type': str(a.GetTypeName()), 'value': str(a.Get())} for a in p.GetAttributes() if a.GetName().startswith('physics:')}}
                         for p in Usd.PrimRange(prim)]})
             row['physics_counter_before_capture'] = before
             row['physics_counter_after_capture'] = env._physics_steps
@@ -106,6 +110,15 @@ def main():
             row['task_success'] = None
             records.append(row)
             (args.output / 'observations.json').write_text(json.dumps(records, default=json_value, indent=2))
+        (args.output / 'completion.json').write_text(json.dumps({'completed_poses': len(records), 'expected_poses': len(poses)}))
+    except BaseException as exc:
+        import traceback
+        import sys
+        (args.output / 'failure.json').write_text(json.dumps({'type': type(exc).__name__, 'message': str(exc), 'traceback': traceback.format_exc()}))
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        raise
     finally:
         env.close(skip_kit_cleanup=True)
 
