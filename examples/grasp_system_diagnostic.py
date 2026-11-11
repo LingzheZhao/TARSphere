@@ -1,6 +1,6 @@
 """Run one author known-positive grasp diagnostic, never an evaluated MLLM task.
 
-Requires an idle original SceneServer in grasp-certification mode, loaded with
+Requires an idle original SceneServer in golden-oracle mode, loaded with
 --scene-id. Frozen target geometry is used only by the certification policy.
 A single pass is a diagnostic, not the author's consecutive-pass certificate.
 """
