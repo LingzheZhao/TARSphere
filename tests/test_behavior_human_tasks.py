@@ -273,12 +273,16 @@ def test_author_clip_import_uses_sdk_kwargs_and_private_storage(tmp_path, monkey
     modules['carb.settings'].get_settings = lambda: SimpleNamespace(
         get=values.get, set=lambda k,v: values.__setitem__(k,v))
     modules['pxr'].Sdf = SimpleNamespace(Path=lambda p: p)
-    stage = SimpleNamespace(GetPrimAtPath=lambda p: True, Load=lambda p: None)
+    prim = SimpleNamespace(IsValid=lambda: True,
+        GetAttribute=lambda key: SimpleNamespace(Get=lambda: current_name[0]))
+    current_name = ['']
+    stage = SimpleNamespace(GetPrimAtPath=lambda p: prim, Load=lambda p: None)
     modules['omni.usd'].get_context = lambda: SimpleNamespace(get_stage=lambda: stage)
     calls = []
     def execute(command, **kwargs):
         calls.append((command, kwargs, values[key]))
-        return True, None
+        current_name[0] = kwargs['action_name']
+        return True, ['/World/Characters/HumanMotionLibrary/CustomActions/' + current_name[0]]
     modules['omni.kit.commands'].execute = execute
     root = tmp_path / 'Characters'
     skeleton = root / 'biped_demo' / 'biped_demo_meters.usd'

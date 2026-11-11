@@ -142,7 +142,8 @@ timeline untouched, and verifies both names on each real agent. Source assets
 and the staged motion-library file remain unchanged. These optional resources
 are not required for GoTo or Idle.
 
-Custom requests retain the existing interaction-anchor admission and dispatch
+The public action contract requires a target anchor and an actor aligned to it.
+The executor does not itself validate hand contact or target alignment. Requests dispatch
 `agent.custom_action(name, duration=seconds)`. Completion comes from that task's
 SDK status, including failed or invalid tasks. Zero duration means indefinite
 execution in the SDK; negative or nonfinite durations are rejected. CPU contracts

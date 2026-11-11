@@ -236,14 +236,17 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
                     raise RuntimeError('Cannot compose the staged behavior motion library')
             stage.Load(library_path)
             for name, clip in clips.items():
-                ok, _ = omni.kit.commands.execute('ImportCustomActionCommand',
+                ok, created = omni.kit.commands.execute('ImportCustomActionCommand',
                     motion_library_prim_path=library_path, rig_name='Human',
                     skeleton_asset=str(skeleton), action_name=name,
                     animation_asset_urls=[str(clip)], action_type='Custom')
-                # The command can log an error and return None despite successful
-                # dispatch. Registration is checked on each real agent below.
-                if not ok:
+                # do() synchronously saves clips/index and returns composed paths.
+                # Dispatch success alone can hide an early logged error.
+                if not ok or not created or len(created) != 1:
                     raise RuntimeError(f'Isaac custom action import failed: {name}')
+                prim = stage.GetPrimAtPath(created[0])
+                if not prim or not prim.IsValid() or prim.GetAttribute('behavior:action:name').Get() != name:
+                    raise RuntimeError(f'Isaac custom action import did not compose {name}')
         finally:
             settings.set(SETTING_USER_CUSTOM_ACTION_FOLDER, previous or '')
 
