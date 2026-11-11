@@ -119,7 +119,7 @@ def main():
                 row['collider_aabb_measurement'] = 'USD authored transforms; native Fabric synchronization unverified'
                 cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ['default','render','proxy'])
                 boxes = []
-                x, y = row['settled']['pose']['position'][:2]
+                settled_xy = np.asarray(row['settled']['pose']['position'][:2], dtype=float)
                 robot_root = env._robot_root_prim_path()
                 if not robot_root:
                     raise RuntimeError('Robot collider root unavailable')
@@ -134,7 +134,7 @@ def main():
                     lo, hi = np.array(bound.GetMin()), np.array(bound.GetMax())
                     if hi[2] < .15 or lo[2] > 1.6:
                         continue
-                    distance = float(np.linalg.norm(np.maximum(np.maximum(lo[:2]-[x,y], [x,y]-hi[:2]), 0)))
+                    distance = float(np.linalg.norm(np.maximum(np.maximum(lo[:2]-settled_xy, settled_xy-hi[:2]), 0)))
                     boxes.append(dict(path=str(prim.GetPath()), bbox_min=lo, bbox_max=hi, xy_distance_m=distance))
                 row['collider_aabbs'] = sorted(boxes, key=lambda b:b['xy_distance_m'])
                 profile = locomotion_control_profile('move_body', params={'delta':[0,0,angle]})
