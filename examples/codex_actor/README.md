@@ -64,8 +64,9 @@ result also passed `MoveBodyHandler` acceptance. These checks establish model
 transport and decision parsing. They do not establish physical execution or
 episode success. Raw probe artifacts remain outside the repository.
 
-The actor model can be selected explicitly with `--model`. To select the author
-README's default `gpt-5.6-sol` through the same Codex account, launch a separate
+The actor model can be selected explicitly with `--model`. To select the
+`gpt-5.6-sol` default from the author model configuration through the same Codex
+account, launch a separate
 adapter with `--model gpt-5.6-sol` and set `TARSPHERE_AGENT_MODEL=gpt-5.6-sol`.
 The request model must match the adapter selection; thread and turn requests
 pin that model and disable provider fallback. The resolved model is checked

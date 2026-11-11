@@ -33,7 +33,7 @@ def main():
     target_record = next(item for item in episode.world_knowledge['objects']
                          if item['object_id'] == config['target_object_id'])
     target = target_record['object_id']
-    poses = [(item['label'], item.get('xy_yaw')) for item in config['poses']]
+    poses = config['poses']
     env = IsaacAutonomousEnv(episode, human_motion_backend='kinematic',
         render_mode=RenderMode.DEMO, headless=True, enable_ego_sensors=True,
         enable_streaming=False, enable_human_ego_cameras=False,
@@ -42,7 +42,8 @@ def main():
     records = []
     try:
         env.reset(scene_prepare_only=True, skip_navmesh=True)
-        for label, pose in poses:
+        for pose_config in poses:
+            label, pose = pose_config['label'], pose_config.get('xy_yaw')
             current = episode.model_copy(deep=True)
             if pose:
                 x, y, yaw = pose
@@ -50,6 +51,11 @@ def main():
                 current.robot.start_orientation = [math.cos(yaw/2), 0., 0., math.sin(yaw/2)]
             env.load_episode(current)
             env.reset(skip_navmesh=True)
+            if 'camera_gaze_tilt_deg' in pose_config:
+                gaze_counter = env._physics_steps
+                env.set_camera_gaze_tilt_deg(float(pose_config['camera_gaze_tilt_deg']))
+                if env._physics_steps != gaze_counter:
+                    raise RuntimeError('Camera-only gaze setter advanced physics counter')
             stage = env._env.runner._world.stage
             import carb
             from isaacsim.core.simulation_manager import SimulationManager
@@ -62,6 +68,7 @@ def main():
             row = {'label': label, 'diagnostic_reset_only': True,
                    'requested_start': current.robot.model_dump(),
                    'actual_pose': env._robot_pose(), 'target': target,
+                   'camera_gaze_tilt_deg': env.camera_gaze_tilt_deg(),
                    'sync': sync, 'target_catalog': target_record,
                    'projection_limit': 'Corner-in-frame is geometry only; neither visibility nor evaluator success',
                    'target_matches': [str(p.GetPath()) for p in matches]}
@@ -79,7 +86,11 @@ def main():
                 rgb, (ids, labels) = runtime.render()
                 np.save(args.output / f'{label}_instance_ids.npy', ids)
                 row['instance_labels'] = labels
-                row['target_visible_pixels'] = sum(int((ids == int(k)).sum()) for k, v in labels.items() if target in str(v))
+                matching_ids = [int(k) for k, v in labels.items() if target in str(v)]
+                target_mask = np.isin(ids, matching_ids)
+                Image.fromarray((target_mask.astype(np.uint8) * 255)).save(args.output / f'{label}_target_mask.png')
+                row['target_instance_ids'] = matching_ids
+                row['target_visible_pixels'] = int(target_mask.sum())
                 Image.fromarray(rgb).save(args.output / f'{label}_segmentation_rgb.png')
                 (args.output / f'{label}_measurement.json').write_text(json.dumps(row, default=json_value, indent=2))
             finally:
