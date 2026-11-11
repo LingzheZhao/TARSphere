@@ -123,6 +123,8 @@ class MemoryState:
     # history. Runtime-owned ledgers (Humans, holding, grounding, plan) remain
     # separate authorities and must not be duplicated here.
     key_memories: list[KeyMemoryRecord] = field(default_factory=list)
+    # Historical self-authored submissions, never evaluator truth or new events.
+    submitted_inspections: list[dict[str, Any]] = field(default_factory=list)
     grasped_hands: list[GraspedHand] = field(default_factory=list)
     humans: list[HumanRecord] = field(default_factory=list)
     # Sparse landmarks explicitly chosen by the Agent. Coordinates and
