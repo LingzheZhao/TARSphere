@@ -1,0 +1,5 @@
+# Caption probes on one saved task observation, not task-completion evidence.
+cases:
+  - image: base-bottle.jpg
+    positive: [bottle, beige bottle, white bottle, vase, tray]
+    negative: []
