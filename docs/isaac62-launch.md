@@ -85,6 +85,13 @@ The scene server initializes this planner with private live joint state before
 model decisions when the episode declares a pickable and admits `grasp_object`.
 The recorded state remains a startup diagnostic; execution reads the joints again.
 
+If CUDA header discovery misses SDK packages exposed through a `.pth` file,
+set standard `CUDA_HOME` or `CUDA_PATH` to the actual installed toolkit prefix
+containing its `include` and library directories. The isolated worker preserves
+these declarations. Verify `cuda.pathfinder` resolves both NVRTC and runtime
+headers there, followed by an actual GPU planner warmup. Do not substitute a
+directory name or fabricated metadata for installed CUDA components.
+
 Before starting the interpreter, set the standard `TMPDIR` variable to a fresh
 writable attempt directory outside the checkout. Worker request files retained
 there after a failure can then be inspected and replayed using the same declared
