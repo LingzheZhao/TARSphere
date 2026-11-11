@@ -61,7 +61,19 @@ def main() -> None:
     record_stage = _stage_recorder(args.result.parent / G1_GRASP_WORKER_STAGES_FILENAME)
     planner = G1GraspPlanner(planning_stage_recorder=record_stage)
     operation = request.get("operation")
-    if operation == "carry":
+    if operation == "initialize":
+        from tarsphere.infra.manipulation.g1_grasp import _require_curobo_v2
+        _require_curobo_v2()
+        planner._create_hand_planner(
+            hand=str(request["hand"]),
+            current_joint_positions=request["current_joint_positions"],
+            current_body_height_command_m=float(request["current_body_height_command_m"]),
+            target_obstacle=None, support_obstacle=None, warmup=True,
+        )
+        import curobo
+        result = {"status": "initialized", "curobo_runtime_version": curobo.__version__,
+                  "curobo_source_path": curobo.__file__}
+    elif operation == "carry":
         try:
             plan = planner.plan_carry(
                 hand=str(request["hand"]),

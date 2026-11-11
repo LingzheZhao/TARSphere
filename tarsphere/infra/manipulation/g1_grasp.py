@@ -2165,6 +2165,17 @@ class G1GraspPlannerClient:
                 f"G1 cuRoboV2 worker not found: {self.worker_script}"
             )
 
+    def initialize(self, *, current_joint_positions: Mapping[str, float],
+                   current_body_height_command_m: float,
+                   hand: str = G1_MANIPULATION_HAND) -> dict[str, Any]:
+        """Construct and warm the actual isolated planner before model actions.
+
+        Uses measured robot joints; it neither plans nor executes a trajectory.
+        """
+        return self._run_worker({"operation": "initialize", "hand": hand,
+            "current_joint_positions": dict(current_joint_positions),
+            "current_body_height_command_m": float(current_body_height_command_m)})
+
     def plan(
         self,
         *,
