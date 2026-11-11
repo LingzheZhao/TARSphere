@@ -2440,8 +2440,13 @@ class G1GraspPlannerClient:
                     "/usr/lib/x86_64-linux-gnu",
                 )
             ),
-            "CUDA_HOME": "/usr/local/cuda",
         }
+        # cuda.pathfinder understands the standard toolkit variables. Keep an
+        # explicitly provisioned real toolkit root; otherwise let it discover
+        # installed NVIDIA wheels rather than force a nonexistent system root.
+        for name in ("CUDA_HOME", "CUDA_PATH"):
+            if os.environ.get(name):
+                environment[name] = os.environ[name]
         worker_cuda = os.environ.get(
             "TARSPHERE_WORKER_CUDA_VISIBLE_DEVICES",
             "",

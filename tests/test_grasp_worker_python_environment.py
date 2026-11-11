@@ -23,3 +23,16 @@ def test_explicit_python_overrides_configured_isolated_environment(monkeypatch, 
     explicit.parent.mkdir(parents=True)
     explicit.symlink_to(sys.executable)
     assert G1GraspPlannerClient(python_executable=explicit).python_executable == explicit
+
+
+def test_clean_environment_keeps_explicit_toolkit_and_allows_discovery(monkeypatch):
+    monkeypatch.delenv('TARSPHERE_DEMO_GPU_UUID', raising=False)
+    monkeypatch.setenv('CUDA_HOME', '/provisioned/cuda13')
+    monkeypatch.setenv('CUDA_PATH', '/provisioned/cuda13')
+    environment = G1GraspPlannerClient()._clean_environment()
+    assert environment['CUDA_HOME'] == '/provisioned/cuda13'
+    assert environment['CUDA_PATH'] == '/provisioned/cuda13'
+    monkeypatch.delenv('CUDA_HOME')
+    monkeypatch.delenv('CUDA_PATH')
+    environment = G1GraspPlannerClient()._clean_environment()
+    assert 'CUDA_HOME' not in environment and 'CUDA_PATH' not in environment
