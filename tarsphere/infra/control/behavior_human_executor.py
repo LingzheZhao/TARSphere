@@ -41,7 +41,6 @@ class BehaviorHumanTasks:
         self.meters_per_unit = scale
         self.task_id = None
         self.command = None
-        self._final_heading = None
 
     def _replace(self, task_id, command):
         if task_id == self.api.BEHAVIOR_TASK_ID_INVALID:
@@ -55,7 +54,6 @@ class BehaviorHumanTasks:
             self.agent.cancel_task(self.task_id)
         self.task_id = None
         self.command = None
-        self._final_heading = None
 
     def goto(self, position_m, *, end_heading_deg=None):
         target = tuple(float(v) for v in position_m)
@@ -66,11 +64,9 @@ class BehaviorHumanTasks:
             heading = math.radians(float(end_heading_deg))
             if not math.isfinite(heading):
                 raise ValueError('GoTo heading must be finite')
-
+            raise NotImplementedError('GoTo final-heading completion requires a verified native lifecycle')
         self.cancel()
-        task = self._replace(self.agent.move_to(**kwargs), 'goto')
-        self._final_heading = end_heading_deg
-        return task
+        return self._replace(self.agent.move_to(**kwargs), 'goto')
 
     def idle(self, *, heading_deg=None):
         kwargs = {}
@@ -85,13 +81,7 @@ class BehaviorHumanTasks:
     def status(self):
         if self.task_id is None:
             return None
-        status = self.agent.get_task_status(self.task_id)
-        if status == self.api.BehaviorTaskStatus.SUCCEEDED and self._final_heading is not None:
-            heading = math.radians(float(self._final_heading))
-            self._final_heading = None
-            self._replace(self.agent.idle(facing=(math.cos(heading), math.sin(heading), 0.0)), 'goto')
-            status = self.agent.get_task_status(self.task_id)
-        return status
+        return self.agent.get_task_status(self.task_id)
 
     def succeeded(self):
         return self.task_id is not None and self.status() == self.api.BehaviorTaskStatus.SUCCEEDED
@@ -322,6 +312,8 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         if command not in {'goto', 'idle', 'listen', *self.SPEECH_COMMANDS}:
             return self._failed(human_id, command,
                 f'Isaac behavior animation action {command!r} is not yet verified in the loaded motion library')
+        if command == 'goto' and action.get('end_rot') not in (None, '_'):
+            return self._failed(human_id, command, 'GoTo final-heading completion requires a verified native lifecycle')
         return super().apply_action(human_id, action)
 
     def _inject_command(self, human_id, command):
