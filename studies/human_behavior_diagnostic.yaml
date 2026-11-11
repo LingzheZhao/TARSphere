@@ -1,0 +1,8 @@
+episode: episodes/case/navigate_and_report/base.yaml
+human_id: Nora
+phases:
+  - {name: initial_idle, command: idle, seconds: 2}
+  - {name: outbound_walk, command: goto, target: [-1.3, 0.04, 0.0], seconds: 6}
+  - {name: return_walk, command: goto, target: [-2.3, 0.04, 0.0], seconds: 6}
+  - {name: heading_turn, command: idle_facing, heading_deg: 90, seconds: 3}
+  - {name: final_idle, command: idle, seconds: 2}

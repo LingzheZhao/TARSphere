@@ -1031,7 +1031,11 @@ class IsaacAutonomousEnv:
                 route_resolver=self._resolve_kinematic_human_route,
                 pose_sync=self._sync_human_body_state,
             )
-        return AnimPeopleBodyExecutor(
+        from tarsphere.infra.control.behavior_human_executor import (
+            BehaviorHumanExecutor, uses_behavior_animation_sdk,
+        )
+        executor = BehaviorHumanExecutor if uses_behavior_animation_sdk() else AnimPeopleBodyExecutor
+        return executor(
             pose_sync=self._sync_human_body_state,
             default_character=DEFAULT_ISAAC_CHARACTER,
             capture_native_motion_trace=_bool_env(
@@ -1548,7 +1552,8 @@ class IsaacAutonomousEnv:
             # away from the authored direction.
             facing_offset_rad = HUMAN_CHARACTER_YAW_OFFSET_RAD
             for human in getattr(self.episode, "humans", []):
-                if self.human_motion_backend == "kinematic":
+                from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+                if self.human_motion_backend == "kinematic" or isinstance(self._human_body, BehaviorHumanExecutor):
                     continue
                 start_yaw = float(getattr(human, "start_yaw", 0.0) or 0.0)
                 if start_yaw == 0.0:
@@ -11106,6 +11111,13 @@ class IsaacAutonomousEnv:
                 "isaacsim.replicator.agent.core",
                 "omni.kit.mesh.raycast",
             )
+        from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+        if isinstance(self._human_body, BehaviorHumanExecutor):
+            required_extensions = (
+                "omni.anim.behavior.core",
+                "omni.anim.navigation.core",
+                "omni.kit.mesh.raycast",
+            )
         for extension in required_extensions:
             try:
                 result = manager.set_extension_enabled_immediate(extension, True)
@@ -11131,6 +11143,9 @@ class IsaacAutonomousEnv:
                 "/exts/isaacsim.replicator.agent/characters_parent_prim_path",
                 "/World/Characters",
             )
+            self._human_body.set_character_assets_path(str(asset_root))
+            return
+        if isinstance(self._human_body, BehaviorHumanExecutor):
             self._human_body.set_character_assets_path(str(asset_root))
             return
         from tarsphere.humans.runtime_capabilities import (

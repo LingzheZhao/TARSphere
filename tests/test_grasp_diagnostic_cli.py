@@ -21,7 +21,7 @@ def test_identity_failure_preserves_evidence_without_submission(tmp_path, monkey
         pytest.fail('must not prepare or submit a trial after identity mismatch')
     monkeypatch.setattr(cli, 'resolve_grasp_system_trial', forbidden)
     output = tmp_path / 'attempt'
-    assert cli.main(['--assets-root', '/unused', '--scene-id', 'expected',
+    assert cli.main(['--http', '--assets-root', '/unused', '--scene-id', 'expected',
         '--request-id', 'attempt-a1', '--output-root', str(output)]) == 2
     assert json.loads((output/'failure.json').read_text())['type'] == 'RuntimeError'
     assert (output/'server_identity.json').exists()
@@ -31,6 +31,20 @@ def test_identity_failure_preserves_evidence_without_submission(tmp_path, monkey
 def test_budget_rejected_before_creating_output(tmp_path, option, value):
     output = tmp_path/'attempt'
     with pytest.raises(SystemExit):
-        cli.main(['--assets-root', '/unused', '--scene-id', 'expected',
+        cli.main(['--http', '--assets-root', '/unused', '--scene-id', 'expected',
             '--request-id', 'a1', '--output-root', str(output), option, value])
     assert not output.exists()
+
+
+def test_inprocess_adapter_forwards_original_certification_request():
+    calls = []
+    server = SimpleNamespace(
+        run_episode=lambda episode, **kw: calls.append((episode, kw)) or {'raw': True},
+        abort_active=lambda request: calls.append(request))
+    adapter = cli.InProcessCertificationClient(server)
+    assert adapter.run_certification_episode('episode', certification_stage='A',
+        request_id='a1', record_video=True, max_steps=60) == {'raw': True}
+    assert calls == [('episode', dict(certification_stage='A', request_id='a1',
+        record_video=True, max_steps=60))]
+    adapter.abort('a1')
+    assert calls[-1] == 'a1'
