@@ -47,8 +47,8 @@ def infer(payload, args):
     if unknown:
         raise ValueError('Unsupported request fields: ' + ', '.join(sorted(unknown)))
     system, items = map_actor_payload(payload)
-    if payload.get('model') != MODEL:
-        raise ValueError('Only the pinned Terra actor model is supported')
+    if payload.get('model') != args.model:
+        raise ValueError('Request model must equal the configured actor model')
     controls = {key: payload[key] for key in ('temperature', 'top_p', 'max_tokens',
                  'max_completion_tokens', 'seed', 'timeout') if key in payload}
     if 'response_format' in payload:
@@ -81,16 +81,16 @@ def infer(payload, args):
                         entry.get('resourceTemplates') or entry.get('runtimeStatus') is not None):
                     raise ProtocolError('MCP server capabilities remain available')
             started = rpc.request('thread/start', {
-                'model': MODEL, 'allowProviderModelFallback': False,
+                'model': args.model, 'allowProviderModelFallback': False,
                 'cwd': cwd, 'ephemeral': True, 'baseInstructions': system,
                 'developerInstructions': '', 'environments': [],
                 'selectedCapabilityRoots': [], 'dynamicTools': [],
                 'runtimeWorkspaceRoots': [], 'sandbox': 'read-only', 'approvalPolicy': 'never'})
-            if started['model'] != MODEL or started.get('instructionSources'):
+            if started['model'] != args.model or started.get('instructionSources'):
                 raise ProtocolError('Unexpected resolved model or loaded instruction sources')
             thread_id = started['thread']['id']
             turn = rpc.request('turn/start', {'threadId': thread_id,
-                'input': items, 'model': MODEL, 'effort': args.effort,
+                'input': items, 'model': args.model, 'effort': args.effort,
                 'environments': [], 'runtimeWorkspaceRoots': []})
             text = None
             usage = None
@@ -120,7 +120,7 @@ def infer(payload, args):
                              'finish_reason': 'stop'}],
                 'usage': {'prompt_tokens': usage['inputTokens'], 'completion_tokens': usage['outputTokens'],
                           'total_tokens': usage['totalTokens']},
-                'codex_adapter': {'transport': 'app-server-v2', 'requested_model': MODEL,
+                'codex_adapter': {'transport': 'app-server-v2', 'requested_model': args.model,
                     'resolved_model': started['model'], 'model_provider': started['modelProvider'],
                     'effort': args.effort,
                     'unapplied_controls': controls, 'raw_token_usage': usage}}
@@ -160,6 +160,7 @@ def main():
     p.add_argument('--port', type=int, default=18093)
     p.add_argument('--codex', default='codex')
     p.add_argument('--effort', default='medium')
+    p.add_argument('--model', default=MODEL)
     p.add_argument('--timeout', type=float, default=180)
     p.add_argument('--disable-mcp', action='append', default=[])
     p.add_argument('--acknowledge-unapplied-controls', action='store_true')

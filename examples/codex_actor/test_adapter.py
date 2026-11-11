@@ -49,7 +49,7 @@ class AdapterTests(unittest.TestCase):
         events = [
             {'id': 1, 'result': {}},
             {'id': 2, 'result': {'data': [{'tools': {}, 'resources': [], 'resourceTemplates': [], 'runtimeStatus': None}]}},
-            {'id': 3, 'result': {'model': 'gpt-6.1-terra', 'modelProvider': 'openai_https', 'instructionSources': [], 'thread': {'id': 'thread-test'}}},
+            {'id': 3, 'result': {'model': 'gpt-5.6-sol', 'modelProvider': 'openai_https', 'instructionSources': [], 'thread': {'id': 'thread-test'}}},
             {'id': 4, 'result': {'turn': {'id': 'turn-test'}}},
             {'method': 'item/started', 'params': {'item': {'type': 'agentMessage', 'phase': 'final_answer', 'text': ''}}},
             {'method': 'item/completed', 'params': {'item': {'type': 'agentMessage', 'phase': 'final_answer', 'text': final}}},
@@ -58,14 +58,24 @@ class AdapterTests(unittest.TestCase):
         ]
         process = SimpleNamespace(pid=999999999, stdin=io.StringIO(),
             stdout=io.StringIO(''.join(json.dumps(e) + '\n' for e in events)), wait=lambda: None)
-        args = SimpleNamespace(codex='codex', disable_mcp=[], timeout=10, effort='medium', acknowledge_unapplied_controls=True)
-        payload = {'model': 'gpt-6.1-terra', 'messages': [{'role': 'system', 'content': 'public'}, {'role': 'user', 'content': 'observation'}], 'temperature': 0}
+        args = SimpleNamespace(model='gpt-5.6-sol', codex='codex', disable_mcp=[], timeout=10, effort='medium', acknowledge_unapplied_controls=True)
+        payload = {'model': 'gpt-5.6-sol', 'messages': [{'role': 'system', 'content': 'public'}, {'role': 'user', 'content': 'observation'}], 'temperature': 0}
         with patch('server.subprocess.Popen', return_value=process), patch('server.os.killpg'):
             response = infer(payload, args)
         self.assertEqual(response['choices'][0]['message']['content'], final)
         self.assertEqual(response['usage']['total_tokens'], 11255)
         self.assertEqual(response['codex_adapter']['model_provider'], 'openai_https')
         self.assertEqual(response['codex_adapter']['unapplied_controls'], {'temperature': 0})
+        self.assertEqual(response['model'], 'gpt-5.6-sol')
+        self.assertEqual(response['codex_adapter']['requested_model'], 'gpt-5.6-sol')
+        sent = [json.loads(line) for line in process.stdin.getvalue().splitlines()]
+        for event in sent:
+            if event.get('method') in ('thread/start', 'turn/start'):
+                self.assertEqual(event['params']['model'], 'gpt-5.6-sol')
+        payload['model'] = 'gpt-6.1-terra'
+        with self.assertRaises(ValueError):
+            infer(payload, args)
+        payload['model'] = 'gpt-5.6-sol'
         payload['unknown_control'] = 1
         with self.assertRaises(ValueError):
             infer(payload, args)

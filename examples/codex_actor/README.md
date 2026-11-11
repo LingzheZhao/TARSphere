@@ -10,7 +10,7 @@ message is returned without extracting or rewriting its decision envelope.
 
 The adapter uses the public Codex app-server v2 protocol and the existing Codex
 login. It does not read credentials. It must be launched from a machine with
-Codex 0.167.0 and access to `gpt-6.1-terra`. It neither launches simulation nor
+Codex 0.167.0 and access to the configured model (default `gpt-6.1-terra`). It neither launches simulation nor
 submits compute work.
 
 ```sh
@@ -63,3 +63,11 @@ Both returned an envelope accepted by the strict decision parser; the HTTP
 result also passed `MoveBodyHandler` acceptance. These checks establish model
 transport and decision parsing. They do not establish physical execution or
 episode success. Raw probe artifacts remain outside the repository.
+
+The actor model can be selected explicitly with `--model`. To select the author
+README's default `gpt-5.6-sol` through the same Codex account, launch a separate
+adapter with `--model gpt-5.6-sol` and set `TARSPHERE_AGENT_MODEL=gpt-5.6-sol`.
+The request model must match the adapter selection; thread and turn requests
+pin that model and disable provider fallback. The resolved model is checked
+and reported. This option does not itself establish an inference or physical
+result for Sol; the verification readings above apply to Terra.
