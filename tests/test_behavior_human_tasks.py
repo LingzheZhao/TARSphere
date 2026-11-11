@@ -175,3 +175,18 @@ def test_measured_joint_tags_refreshes_and_serializes(monkeypatch):
     assert body.measured_joint_tags('Nora')['value'] == {}
     receipt = body.measured_joint_tags('Nora')
     assert json.loads(json.dumps(receipt))['value'] == {'Pelvis': 'actual-tag'}
+
+
+def test_goto_final_heading_waits_for_native_facing_and_preserves_units():
+    agent = Agent()
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=.01)
+    moving = tasks.goto([1, 2, 0], end_heading_deg=90)
+    assert agent.calls[-1][1]['target'] == (100, 200, 0)
+    assert not tasks.succeeded()
+    agent.tasks[moving] = 'succeeded'
+    assert not tasks.succeeded()
+    assert tasks.command == 'goto'
+    assert agent.calls[-1][0] == 'idle'
+    assert agent.calls[-1][1]['facing'] == pytest.approx((0, 1, 0))
+    agent.tasks[tasks.task_id] = 'succeeded'
+    assert tasks.succeeded()
