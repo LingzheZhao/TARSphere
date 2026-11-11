@@ -2139,9 +2139,10 @@ class G1GraspPlannerClient:
         worker_script: Path | None = None,
         timeout_s: float = G1_GRASP_PLANNING_TIMEOUT_S,
     ) -> None:
-        # Python environment containing the pinned cuRoboV2 checkout.
+        # Preserve the venv entry point: resolving its Python symlink selects
+        # the base interpreter and loses that environment's installed Torch.
         self.python_executable = (
-            Path(python_executable or sys.executable).expanduser().resolve()
+            Path(python_executable or sys.executable).expanduser().absolute()
         )
         repository_root = Path(__file__).resolve().parents[3]
         # Small process entry point; it never imports Isaac or its Warp build.
