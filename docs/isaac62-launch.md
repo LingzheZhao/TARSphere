@@ -13,7 +13,7 @@ model environment; leave the simulator's NumPy installation untouched.
 `TARSPHERE_MODEL_SERVICE_GPU` is an NVML GPU index as seen inside the execution
 container; the service launcher checks that it belongs to the caller's
 `CUDA_VISIBLE_DEVICES` allocation. Resolve it by the allocated GPU UUID.
-The scheduler's host device number can differ from the container's index.
+The host device number can differ from the container's index.
 XNavDP forwards `TARSPHERE_MODEL_GPU` directly to its `CUDA_VISIBLE_DEVICES`.
 
 Export `TARSPHERE_XNAVDP_ROOT` to the provisioned official X-NavDP checkout
@@ -52,3 +52,16 @@ For external GraspGenX resources set `TARSPHERE_GRASPGENX_CHECKPOINT_ROOT` and
 Separately, upstream model construction may use `GRASPGENX_CHECKPOINT_DIR` and
 `GRASPGENX_GRIPPER_CFG_DIR`; configure these in the service environment to point to the
 provisioned resources and avoid implicit downloads or cloning.
+
+For animated characters, stage the SDK `HumanMotionLibrary.usd` and export
+`TARSPHERE_BEHAVIOR_MOTION_LIBRARY` to that file. Isaac 6.2 uses the SDK behavior
+agent when the legacy People extension is absent. Only GoTo, Idle, Listen and
+speech have been exercised; other action requests fail explicitly. See
+[character and manipulation limits](ISAAC_SIM_6_2.md#isaac-62-character-execution).
+
+Provision Shapely 2.2 with constrained Delaunay support, `manifold3d==3.5.2`
+and `trimesh>=4.0` in the simulator environment before launch. The runner probes
+real triangulation and Boolean geometry before and after Kit startup to detect
+vendored dependency replacement. For the table grasp component entrypoint and
+its required prepared inputs, see [the diagnostic](ISAAC_SIM_6_2.md#table-grasp-diagnostic-and-geometry-dependencies).
+No physical grasp success is established by environment preflight.

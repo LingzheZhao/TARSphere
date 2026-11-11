@@ -3,8 +3,9 @@
 This fork branch contains the compatibility changes tested in humanoid-office.
 The original author baseline is `ea708be666d13962f7c74dbcd0360d34eb4d379a`;
 the executed compatibility snapshot was `78e7d5d0323bac228c30844d9cf2a58a4672202e`.
-The source changes below preserve that executed code. They establish the G1
-body/camera check, not the complete original Isaac Sim 5.1 benchmark.
+That snapshot establishes the G1
+body/camera check, not the complete original Isaac Sim 5.1 benchmark. Subsequent
+interfaces described below have separate validation limits.
 
 The check completed cold preparation, resident reset and 120 environment `step`
 calls, with an upright endpoint assertion and three 640 by 480 RGB-D samples.
@@ -115,6 +116,70 @@ PhysX post-step callbacks. In the observed 6.2 condition their readings differ;
 the World clock accumulates callback step sizes. Neither counter is treated as
 independent evidence of the robot scene's integration time. The diagnostic's
 time bounds and control sequence remain unchanged.
+
+## Isaac 6.2 character execution
+
+The `animation` human-motion backend selects `BehaviorHumanExecutor` when the
+installed SDK provides `omni.anim.behavior.core` without `omni.anim.people`.
+SDKs with the legacy People extension retain `AnimPeopleBodyExecutor`. The
+`kinematic` backend described above remains a separate root-translation diagnostic.
+Teleoperation selects `animation`; it does not select the kinematic substitute.
+
+Stage the SDK's `HumanMotionLibrary.usd` and set
+`TARSPHERE_BEHAVIOR_MOTION_LIBRARY` to its file path. The executor uses the
+original `F_Medical_01` character, explicitly loads its USD payload, and binds
+its skeleton through the SDK control-rig mapping and behavior agent. It drives
+SDK tasks rather than writing walking root transforms or synthesizing joints.
+GoTo (including final facing), Idle, Listen and speech are the exercised subset;
+other actions fail explicitly. Sitting and the full author animation action set
+are not validated on this backend.
+
+The 19-second out-and-return protocol with a 90-degree final facing request
+completed on revision `20d02e6`. Numeric joint transforms were unavailable in
+that reading, so task completion does not establish measured skeletal fidelity
+or full animation coverage. Task feedback, rendered observations and skeleton
+measurements have distinct evidential limits.
+
+Compatibility paths use the public Kit application loop and PhysX backend
+`resolve_indices` interface. These interface fixes do not establish physical
+manipulation success.
+
+## Table grasp diagnostic and geometry dependencies
+
+`examples/table_grasp_diagnostic.py` runs the author's public table grasp skill
+without an MLLM. Supply a CPU-prepared `GroundedScene` JSON and its reviewed
+occupancy file under the declared assets root:
+
+```sh
+python examples/table_grasp_diagnostic.py \
+  --assets-root /absolute/prepared-assets \
+  --grounded-scene /absolute/prepared-grounded-scene.json \
+  --request-id table-attempt-1 --max-steps 12 \
+  --output-root /absolute/new-table-output
+```
+
+Run in a provisioned SDK/model environment with a finite external wall-clock
+budget. The diagnostic refuses existing output roots, records declared inputs,
+retains failures and reports holding, retention and transport samples only when
+present. Exit status alone is not physical grasp evidence. This component check
+does not replace Fetch-and-Deliver execution.
+
+Support geometry requires Shapely with constrained Delaunay triangulation
+(the source minimum is 2.1.2; the provisioned condition uses 2.2),
+`manifold3d==3.5.2` and `trimesh>=4.0`. Preload these before Kit can prepend its
+older vendored Shapely. The standard runner exercises triangulation and the
+Mesh64 Boolean/export path before Kit, then repeats the probe after startup and
+checks that dependency identities did not change. The table diagnostic performs
+the preload before constructing its scene server. Import success alone is
+insufficient evidence that support geometry works.
+
+Declared pickables loaded from `scene_static` are normalized as held kinematic
+rigid bodies before the first physics advance, including scene baking. The
+ordinary grasp lifecycle subsequently controls their physical release. This
+prevents initialization from dropping objects before the test begins; it does
+not establish successful contact, retention, lift or transport. Manipulation
+remains blocked by infrastructure failures; no physical grasp success has been
+validated in this Isaac 6.2 condition.
 
 ## Published benchmark definitions
 
