@@ -1,0 +1,78 @@
+"""Run one author known-positive grasp diagnostic, never an evaluated MLLM task.
+
+Requires an idle original SceneServer in grasp-certification mode, loaded with
+--scene-id. Frozen target geometry is used only by the certification policy.
+A single pass is a diagnostic, not the author's consecutive-pass certificate.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from pathlib import Path
+import traceback
+
+from tarsphere.bench.grounding.resolve import resolve_scene
+from tarsphere.bench.certification.scene_client import SceneServerClient
+from tarsphere.bench.certification.grasp_system import resolve_grasp_system_trial
+from tarsphere.bench.certification.grasp_system_episode import compile_grasp_system_episode
+from tarsphere.bench.certification.physical_rollout import run_grasp_system_trial
+
+
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError('must be positive')
+    return number
+
+
+def positive_seconds(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError('must be finite and positive')
+    return number
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--assets-root', required=True)
+    parser.add_argument('--scene-id', required=True)
+    parser.add_argument('--host', default='127.0.0.1')
+    parser.add_argument('--port', type=positive_int, default=8765)
+    parser.add_argument('--timeout-s', type=positive_seconds, default=1800)
+    parser.add_argument('--max-steps', type=positive_int, default=60)
+    parser.add_argument('--request-id', required=True)
+    parser.add_argument('--output-root', type=Path, required=True)
+    args = parser.parse_args(argv)
+    if not args.request_id.strip():
+        parser.error('--request-id must not be blank')
+    args.output_root.mkdir(parents=True, exist_ok=False)
+    (args.output_root / 'arguments.json').write_text(json.dumps(
+        {key: str(value) if isinstance(value, Path) else value
+         for key, value in vars(args).items()}, indent=2))
+    try:
+        scene = resolve_scene(args.scene_id, assets_root=args.assets_root)
+        client = SceneServerClient(host=args.host, port=args.port, timeout_s=args.timeout_s)
+        identity = client.identity()
+        (args.output_root / 'server_identity.json').write_text(identity.model_dump_json(indent=2))
+        if identity.active_request_id is not None or scene.scene_id not in identity.scene:
+            raise RuntimeError('Expected an idle SceneServer loaded with the grounded scene')
+        trial = resolve_grasp_system_trial(scene, scene_server_id=identity.scene_server_id,
+            scene_server_git_sha=identity.scene_server_git_sha, assets_root=args.assets_root)
+        episode = compile_grasp_system_episode('single_grasp_component_diagnostic', trial=trial, scene=scene)
+        (args.output_root / 'episode.json').write_text(episode.model_dump_json(indent=2))
+        result = run_grasp_system_trial(client, episode, request_id=args.request_id,
+            record_video=True, max_steps=args.max_steps)
+        (args.output_root / 'result.json').write_text(result.model_dump_json(indent=2))
+    except Exception as exc:
+        (args.output_root / 'failure.json').write_text(json.dumps({
+            'type': type(exc).__name__, 'message': str(exc),
+            'traceback': traceback.format_exc()}, indent=2))
+        print(f'Component diagnostic failed: {exc}')
+        return 2
+    print(f'Component diagnostic passed: {result.passed}')
+    return 0 if result.passed else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
