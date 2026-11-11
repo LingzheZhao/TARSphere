@@ -10650,7 +10650,7 @@ class IsaacAutonomousEnv:
         preparer = PhysicalScenePreparer(preparation)
         self._physical_scene_preparer = preparer
         try:
-            diagnostics = preparer.apply(stage)
+            diagnostics = preparer.apply(stage, physics_world=self._env.runner._world)
         except Exception:
             self._restore_physical_scene_preparation()
             raise
@@ -10687,6 +10687,7 @@ class IsaacAutonomousEnv:
             objects,
             robot_root_path=root_path,
             object_local_unit_in_meters=self._scene_asset_unit_in_meters,
+            physics_world=self._env.runner._world,
             on_world_authored=self._invalidate_ego_snapshot,
         )
         executor.start()

@@ -445,21 +445,9 @@ def run_grasp_system_trial(
     max_steps: Optional[int] = None,
 ) -> PhysicalTrialRolloutResult:
     """Run the known-positive reference through the normal grasp stack."""
-    world = episode.world_knowledge
-    if (
-        not isinstance(world, dict)
-        or "grasp_system_trial" not in world
-        or any(
-            key in world
-            for key in (
-                "physical_trial",
-                "physical_task",
-                "episode_route",
-            )
-        )
-    ):
-        raise ValueError("run_grasp_system_trial requires one grasp-system episode")
-    trial = GraspSystemTrial.model_validate(world["grasp_system_trial"])
+    from tarsphere.bench.certification.grasp_system_episode import validate_grasp_system_world
+
+    trial = validate_grasp_system_world(episode.world_knowledge)
     result = _run_certification_episode(
         scene_server,
         episode,

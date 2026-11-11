@@ -190,6 +190,18 @@ def _world_with_physical_task(
     return updated
 
 
+def validate_grasp_system_world(world: Any) -> GraspSystemTrial:
+    """Admit only one calibration plus its exact runtime manipulation binding."""
+    if not isinstance(world, dict) or "grasp_system_trial" not in world:
+        raise ValueError("Expected one grasp-system episode")
+    if any(key in world for key in ("grasp_motion_trial", "physical_trial", "episode_route")):
+        raise ValueError("Grasp-system trials cannot declare another task or route")
+    trial = GraspSystemTrial.model_validate(world["grasp_system_trial"])
+    if world.get("physical_task") != _physical_task(trial):
+        raise ValueError("Grasp-system runtime binding must exactly match its reference trial")
+    return trial
+
+
 def _reference_object(trial: GraspSystemTrial) -> EpisodeObject:
     reference = trial.reference_object
     return EpisodeObject(
