@@ -2196,7 +2196,7 @@ class IsaacAutonomousEnv:
             raise RuntimeError(
                 "Initial presentation streams have partial or stale captures."
             )
-        import omni.kit.loop._loop as omni_loop
+        from omni.kit.loop import _loop as omni_loop
         import omni.timeline
 
         loop = omni_loop.acquire_loop_interface()
@@ -10056,7 +10056,7 @@ class IsaacAutonomousEnv:
         """
         if getattr(self, "human_motion_backend", "kinematic") == "animation":
             if timing in {"after", "error", "interrupted"}:
-                import omni.kit.loop._loop as omni_loop
+                from omni.kit.loop import _loop as omni_loop
 
                 # Native env.step may render via app.update(). The explicit
                 # 60 Hz human pump already accounts for elapsed physics time;
@@ -10166,7 +10166,7 @@ class IsaacAutonomousEnv:
             timing == "before"
             and getattr(self, "human_motion_backend", "kinematic") == "animation"
         ):
-            import omni.kit.loop._loop as omni_loop
+            from omni.kit.loop import _loop as omni_loop
 
             # Arm only after camera preparation succeeds: an observer error
             # before env.step must not leave the animation clock frozen.
@@ -12449,7 +12449,7 @@ class IsaacAutonomousEnv:
         ``simulation_context.py:460`` sets this from ``rendering_dt``, but only
         at construction time, and this environment builds the sim with
         ``rendering_dt = 1/240``.  Changing it afterwards therefore has to go
-        through ``omni.kit.loop._loop`` directly.
+        through the public ``omni.kit.loop`` bindings export directly.
 
         Physics is deliberately untouched: the Kit loop and
         ``_physics_context.set_physics_dt`` are separate clocks.  The physics dt
@@ -12464,7 +12464,7 @@ class IsaacAutonomousEnv:
             "physics_dt_source": None,
         }
         try:
-            import omni.kit.loop._loop as omni_loop
+            from omni.kit.loop import _loop as omni_loop
 
             loop = omni_loop.acquire_loop_interface()
         except Exception as exc:
