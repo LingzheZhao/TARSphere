@@ -2193,8 +2193,7 @@ def render_demo_presentation(
         if full_hud:
             q = height / 720
             logo = (
-                Path(__file__).resolve().parents[3]
-                / "assets/presentation/tarsphere-logo.png"
+                Path(__file__).resolve().parent / "assets/tarsphere-logo.png"
             )
             lx, ly = round(ew + 28 * q), round(628 * q)
             filters[-1] = filters[-1].replace("[out]", "[hud]")
@@ -2218,8 +2217,7 @@ def render_demo_presentation(
             )
         q = height / 720
         logo = (
-            Path(__file__).resolve().parents[3]
-            / "assets/presentation/tarsphere-logo.png"
+            Path(__file__).resolve().parent / "assets/tarsphere-logo.png"
         )
         if not logo.is_file():
             raise FileNotFoundError(f"Original TARSphere logo missing: {logo}")

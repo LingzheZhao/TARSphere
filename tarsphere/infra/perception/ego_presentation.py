@@ -77,7 +77,7 @@ def compose_presentation(
     mx, my, mw, mh = layout.rect("map")
     tail = INTERACTION_MIN_DISPLAY_SECONDS
     logo = (
-        Path(__file__).resolve().parents[3] / "assets/presentation/tarsphere-logo.png"
+        Path(__file__).resolve().parent / "assets/tarsphere-logo.png"
     )
     logo_width = round(176 * height / 720)
     logo_x = layout.ego_width + layout.margin
