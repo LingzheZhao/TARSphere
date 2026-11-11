@@ -11236,7 +11236,14 @@ class IsaacAutonomousEnv:
         )
 
         import carb
-        import NavSchema
+        try:
+            import NavSchema
+        except ModuleNotFoundError as exc:
+            if exc.name != "NavSchema":
+                raise
+            # Isaac 6.x ships codeless registered schemas, not pxr wrappers.
+            import omni.anim.navigation.schema as navigation_schema
+            NavSchema = None
         import omni.anim.navigation.core as nav
         import omni.usd
         from pxr import Sdf, Usd, UsdGeom
@@ -11267,10 +11274,11 @@ class IsaacAutonomousEnv:
                 volume = preferred_volume
                 created_volume = False
             else:
-                volume = NavSchema.NavMeshVolume.Define(
-                    stage,
-                    ANIM_PEOPLE_NAVMESH_VOLUME_PATH,
-                ).GetPrim()
+                volume = (
+                    NavSchema.NavMeshVolume.Define(stage, ANIM_PEOPLE_NAVMESH_VOLUME_PATH).GetPrim()
+                    if NavSchema is not None
+                    else stage.DefinePrim(ANIM_PEOPLE_NAVMESH_VOLUME_PATH, navigation_schema.NAV_MESH_VOLUME)
+                )
                 created_volume = True
             if (
                 not volume
@@ -11281,11 +11289,16 @@ class IsaacAutonomousEnv:
                     f"Could not create {ANIM_PEOPLE_NAVMESH_VOLUME_PATH} for "
                     "omni.anim.people navigation."
                 )
-            volume_schema = NavSchema.NavMeshVolume(volume)
-            volume_type_attr = volume_schema.GetNavVolumeTypeAttr()
-            if volume_type_attr:
-                volume_type_attr.Set("Include")
-            NavSchema.NavMeshAreaAPI.Apply(volume)
+            if NavSchema is not None:
+                volume_type_attr = NavSchema.NavMeshVolume(volume).GetNavVolumeTypeAttr()
+                NavSchema.NavMeshAreaAPI.Apply(volume)
+            else:
+                # Same attribute and API used by SDK CreateNavMeshVolumeCommand.
+                volume_type_attr = volume.GetAttribute("nav:volume:type")
+                volume.ApplyAPI(navigation_schema.NAV_MESH_AREA_API)
+            if not volume_type_attr:
+                raise RuntimeError("Registered NavMeshVolume lacks its volume-type attribute")
+            volume_type_attr.Set("Include")
             area_attr = volume.GetAttribute("nav:area")
             if not area_attr:
                 area_attr = volume.CreateAttribute(
@@ -12539,7 +12552,13 @@ class IsaacAutonomousEnv:
         cameras) are excluded so they do not become static NavMesh obstacles.
         """
         del center, scale
-        import NavSchema
+        try:
+            import NavSchema
+        except ModuleNotFoundError as exc:
+            if exc.name != "NavSchema":
+                raise
+            import omni.anim.navigation.schema as navigation_schema
+            NavSchema = None
         from pxr import UsdGeom
 
         excluded = 0
@@ -12575,13 +12594,17 @@ class IsaacAutonomousEnv:
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
             try:
                 if should_exclude:
-                    NavSchema.NavMeshExcludeAPI.Apply(prim)
+                    if NavSchema is not None:
+                        NavSchema.NavMeshExcludeAPI.Apply(prim)
+                    else:
+                        prim.ApplyAPI(navigation_schema.NAV_MESH_EXCLUDE_API)
                     excluded += 1
                     if len(excluded_samples) < 5:
                         excluded_samples.append(f"{path} ({reason})")
                 else:
                     try:
-                        prim.RemoveAPI(NavSchema.NavMeshExcludeAPI)
+                        prim.RemoveAPI(NavSchema.NavMeshExcludeAPI if NavSchema is not None
+                                       else navigation_schema.NAV_MESH_EXCLUDE_API)
                     except Exception as exc:
                         failed.append(f"{path} remove NavMeshExcludeAPI: {exc}")
                     included += 1
