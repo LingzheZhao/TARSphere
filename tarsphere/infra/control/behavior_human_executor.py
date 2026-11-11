@@ -145,12 +145,17 @@ def behavior_limb_pose(agent, joint_tags, *, meters_per_unit, vector_factory=Non
 def skeleton_joint_tags(skeleton):
     """Read the SDK ControlRigAPI mapping without guessing joint aliases."""
     import RetargetingSchema
+    from omni.anim.retarget.core.scripts.utils import convert_to_simple_joints
     rig = RetargetingSchema.ControlRigAPI(skeleton.GetPrim())
     tags = list(rig.GetJointTagsAttr().Get() or [])
     joints = list(skeleton.GetJointsAttr().Get() or [])
-    if len(tags) != len(joints):
-        raise ValueError('Actual skeleton ControlRigAPI joint tags do not match its joint order')
-    return {str(joint).rsplit('/', 1)[-1]: str(tag) for joint, tag in zip(joints, tags, strict=True) if str(tag)}
+    simple_joints = list(convert_to_simple_joints(joints))
+    if len(tags) != len(simple_joints):
+        raise ValueError(f'ControlRig mapping unavailable: skeleton={skeleton.GetPrim().GetPath()}, '
+                         f'raw_joints={list(map(str, joints))!r}, simple_joints={list(map(str, simple_joints))!r}, '
+                         f'raw_tags={list(map(str, tags))!r}')
+    return {str(joint): str(tag) for joint, tag in zip(simple_joints, tags, strict=True) if str(tag)}
+
 
 
 # Keep the author's action admission, ordered routes, physical-state contracts,
@@ -171,7 +176,7 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         super().__init__(*args, **kwargs)
         self._behavior_tasks = {}
         self._behavior_library_path = None
-        self._behavior_joint_tags = {}
+        self._behavior_skeletons = {}
 
     def author_character_animation_graph(self):
         # The 6.x motion library and BehaviorAgentAPI replace Biped_Setup.
@@ -265,7 +270,7 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
             if len(skeletons) != 1:
                 raise RuntimeError(f'Expected one behavior skeleton for {human_id}')
             from tarsphere.infra.control.human_native_motion_trace import measured
-            self._behavior_joint_tags[human_id] = measured(lambda: skeleton_joint_tags(UsdSkel.Skeleton(skeletons[0])))
+            self._behavior_skeletons[human_id] = UsdSkel.Skeleton(skeletons[0])
             agent = None
             for _ in range(120):
                 agent = bh.acquire_interface().get_agent(skelroot)
@@ -347,6 +352,10 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         self._behavior_tasks[human_id].idle()
         state.animation_state = 'idle'
 
+    def measured_joint_tags(self, human_id):
+        from tarsphere.infra.control.human_native_motion_trace import measured
+        return measured(lambda: skeleton_joint_tags(self._behavior_skeletons[human_id]))
+
     def poll_native_motion_trace(self, *, observation_boundary, force=False):
         if not self._capture_native_motion_trace or self._physics_step is None:
             return
@@ -358,6 +367,7 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
             previous = self._last_native_motion_trace_tick.get(human_id)
             if not force and previous is not None and tick - previous < period:
                 continue
+            tag_mapping = self.measured_joint_tags(human_id)
             self._replay_log.append(dict(event='human_behavior_motion_snapshot', physics_step=tick,
                 human_id=human_id, observation_boundary=observation_boundary,
                 sampling_period_ticks=period, body_state=state.to_observation(),
@@ -365,9 +375,9 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
                     facing_direction=tasks.agent.get_facing_direction(), task_id=tasks.task_id,
                     task_status=str(tasks.status()))),
                 joint_readback=measured(lambda: behavior_limb_pose(tasks.agent,
-                    self._behavior_joint_tags[human_id].get('value', {}),
+                    tag_mapping.get('value', {}),
                     meters_per_unit=tasks.meters_per_unit)),
-                skeleton_joint_tag_mapping=self._behavior_joint_tags[human_id]))
+                skeleton_joint_tag_mapping=tag_mapping))
             self._last_native_motion_trace_tick[human_id] = tick
 
     def poll_animation_graph(self, *, observation_boundary):

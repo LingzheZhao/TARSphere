@@ -101,14 +101,15 @@ def main():
             while remaining > 0:
                 before = env._physics_steps
                 state = body.get_state(human_id)
+                tag_mapping = body.measured_joint_tags(human_id)
                 row = dict(phase=phase['name'], admission=admission,
                     physics_step=before, state=asdict(state),
                     behavior_pose=measured(lambda: body._poll_character_runtime_pose(human_id)),
                     skeleton=measured(skeleton),
-                    behavior_joint_tag_mapping=body._behavior_joint_tags[human_id],
+                    behavior_joint_tag_mapping=tag_mapping,
                     behavior_joints=measured(lambda: behavior_limb_pose(
                         body._behavior_tasks[human_id].agent,
-                        body._behavior_joint_tags[human_id].get('value', {}),
+                        tag_mapping.get('value', {}),
                         meters_per_unit=body._behavior_tasks[human_id].meters_per_unit)))
                 proxy_path = env._human_collision_proxy_paths.get(human_id)
                 row['collision_proxy'] = measured(lambda: dict(path=proxy_path,

@@ -22,8 +22,11 @@ def compiled():
     return compile_grasp_system_episode("binding_test", trial=trial, scene=scene)
 
 
-def test_compiler_binding_passes_reader_and_oracle_without_fake_execution(monkeypatch):
+@pytest.mark.parametrize("json_roundtrip", [False, True])
+def test_compiler_binding_passes_reader_and_oracle_without_fake_execution(monkeypatch, json_roundtrip):
     episode = compiled()
+    if json_roundtrip:
+        episode = type(episode).model_validate_json(episode.model_dump_json())
     trial = validate_grasp_system_world(episode.world_knowledge)
     phases = GoldenOracleAgent._build_phases(episode)
     assert phases and phases[-1]["kind"] == "report"
@@ -54,14 +57,18 @@ def test_compiler_binding_passes_reader_and_oracle_without_fake_execution(monkey
     assert episode.world_knowledge["physical_task"]["target_object_id"] == trial.reference_object.object_id
 
 
-@pytest.mark.parametrize("mutation", ["target", "grasp", "extra", "route", "trial"])
-def test_mixed_or_mismatched_task_rejected(mutation):
+@pytest.mark.parametrize("json_roundtrip", [False, True])
+@pytest.mark.parametrize("mutation", ["target", "grasp", "extra", "route", "trial", "unknown_grasp"])
+def test_mixed_or_mismatched_task_rejected(mutation, json_roundtrip):
     episode = compiled()
+    if json_roundtrip:
+        episode = type(episode).model_validate_json(episode.model_dump_json())
     world = deepcopy(episode.world_knowledge)
     if mutation == "target": world["physical_task"]["target_object_id"] = "other"
     elif mutation == "grasp": world["physical_task"]["grasp"]["robot_yaw_rad"] = 1
     elif mutation == "extra": world["physical_task"]["place"] = {}
     elif mutation == "route": world["episode_route"] = {}
+    elif mutation == "unknown_grasp": world["physical_task"]["grasp"]["unknown_action"] = "attach"
     else: world["physical_trial"] = {}
     episode.world_knowledge = world
     with pytest.raises(ValueError): validate_grasp_system_world(world)

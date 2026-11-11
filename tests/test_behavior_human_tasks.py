@@ -142,3 +142,36 @@ def test_behavior_joint_failure_cannot_become_static_zero_pose():
     agent.get_joint_world_transform = lambda index, translation, rotation:True
     with pytest.raises(ValueError, match='Invalid'):
         behavior_limb_pose(agent,tags,meters_per_unit=1,vector_factory=lambda size:[float('nan')]*size)
+
+
+def test_control_rig_mapping_uses_sdk_conversion_and_keeps_raw_failure(monkeypatch):
+    import sys
+    from tarsphere.infra.control.behavior_human_executor import skeleton_joint_tags
+    attr = lambda value: SimpleNamespace(Get=lambda: value)
+    tags = ['pelvis-tag', 'foot-tag']
+    monkeypatch.setitem(sys.modules, 'RetargetingSchema', SimpleNamespace(
+        ControlRigAPI=lambda prim: SimpleNamespace(GetJointTagsAttr=lambda: attr(tags))))
+    calls = []
+    def convert(joints):
+        calls.append(joints)
+        return ['Pelvis', 'L_Foot']
+    monkeypatch.setitem(sys.modules, 'omni.anim.retarget.core.scripts.utils', SimpleNamespace(convert_to_simple_joints=convert))
+    skeleton = SimpleNamespace(GetPrim=lambda: SimpleNamespace(GetPath=lambda: '/Skeleton'),
+        GetJointsAttr=lambda: attr(['Root/Pelvis', 'Root/Pelvis/L_Foot']))
+    assert skeleton_joint_tags(skeleton) == {'Pelvis': 'pelvis-tag', 'L_Foot': 'foot-tag'}
+    assert calls == [['Root/Pelvis', 'Root/Pelvis/L_Foot']]
+    tags.clear()
+    with pytest.raises(ValueError, match="raw_tags=\\[\\]"):
+        skeleton_joint_tags(skeleton)
+
+
+def test_measured_joint_tags_refreshes_and_serializes(monkeypatch):
+    import json
+    import tarsphere.infra.control.behavior_human_executor as module
+    body = object.__new__(module.BehaviorHumanExecutor)
+    body._behavior_skeletons = {'Nora': object()}
+    values = iter([{}, {'Pelvis': 'actual-tag'}])
+    monkeypatch.setattr(module, 'skeleton_joint_tags', lambda skeleton: next(values))
+    assert body.measured_joint_tags('Nora')['value'] == {}
+    receipt = body.measured_joint_tags('Nora')
+    assert json.loads(json.dumps(receipt))['value'] == {'Pelvis': 'actual-tag'}

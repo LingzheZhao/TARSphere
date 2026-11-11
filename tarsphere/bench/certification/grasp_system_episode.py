@@ -6,6 +6,7 @@ import re
 from typing import Any, Tuple
 
 from pydantic import Field
+from pydantic_core import to_jsonable_python
 
 from tarsphere.bench.certification.grasp_system import (
     EMPTY_GRASP_SCENE_ID,
@@ -197,7 +198,11 @@ def validate_grasp_system_world(world: Any) -> GraspSystemTrial:
     if any(key in world for key in ("grasp_motion_trial", "physical_trial", "episode_route")):
         raise ValueError("Grasp-system trials cannot declare another task or route")
     trial = GraspSystemTrial.model_validate(world["grasp_system_trial"])
-    if world.get("physical_task") != _physical_task(trial):
+    # JSON transport represents coordinate tuples as arrays. Compare the
+    # complete bindings in that representation, preserving every key/value.
+    if to_jsonable_python(world.get("physical_task")) != to_jsonable_python(
+        _physical_task(trial)
+    ):
         raise ValueError("Grasp-system runtime binding must exactly match its reference trial")
     return trial
 
