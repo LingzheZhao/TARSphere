@@ -130,12 +130,14 @@ Stage the SDK's `HumanMotionLibrary.usd` and set
 original `F_Medical_01` character, explicitly loads its USD payload, and binds
 its skeleton through the SDK control-rig mapping and behavior agent. It drives
 SDK tasks rather than writing walking root transforms or synthesizing joints.
-GoTo (including final facing), Idle, Listen and speech are the exercised subset;
-other actions fail explicitly. Sitting and the full author animation action set
+GoTo, Idle, Listen and speech are implemented; other actions fail explicitly.
+GoTo final facing composes move-to and idle-facing SDK tasks into one completion
+lifecycle. That composition has CPU checks but has not been verified in simulation. Sitting and the full author animation action set
 are not validated on this backend.
 
-The 19-second out-and-return protocol with a 90-degree final facing request
-completed on revision `20d02e6`. Numeric joint transforms were unavailable in
+The 19-second out-and-return protocol followed by a standalone 90-degree
+idle-facing request completed on revision `20d02e6`. This did not exercise the
+later composed GoTo final-facing lifecycle. Numeric joint transforms were unavailable in
 that reading, so task completion does not establish measured skeletal fidelity
 or full animation coverage. Task feedback, rendered observations and skeleton
 measurements have distinct evidential limits.

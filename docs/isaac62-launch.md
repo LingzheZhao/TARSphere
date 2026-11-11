@@ -55,8 +55,9 @@ provisioned resources and avoid implicit downloads or cloning.
 
 For animated characters, stage the SDK `HumanMotionLibrary.usd` and export
 `TARSPHERE_BEHAVIOR_MOTION_LIBRARY` to that file. Isaac 6.2 uses the SDK behavior
-agent when the legacy People extension is absent. Only GoTo, Idle, Listen and
-speech have been exercised; other action requests fail explicitly. See
+agent when the legacy People extension is absent. GoTo, Idle, Listen and
+speech are implemented; other action requests fail explicitly. The composed
+GoTo final-facing lifecycle has CPU checks but remains unverified in simulation. See
 [character and manipulation limits](ISAAC_SIM_6_2.md#isaac-62-character-execution).
 
 Provision Shapely 2.2 with constrained Delaunay support, `manifold3d==3.5.2`
@@ -65,3 +66,16 @@ real triangulation and Boolean geometry before and after Kit startup to detect
 vendored dependency replacement. For the table grasp component entrypoint and
 its required prepared inputs, see [the diagnostic](ISAAC_SIM_6_2.md#table-grasp-diagnostic-and-geometry-dependencies).
 No physical grasp success is established by environment preflight.
+
+The grasp planner requires cuRobo 0.8.0. The audited bundled source is documented
+in [TARSPHERE_SOURCE.md](../third_party/curobo/TARSPHERE_SOURCE.md). Its exact
+`v0.8.0-no-tag` version sentinel is accepted only when imported from that bundled
+checkout; it does not authorize an arbitrary unversioned installation. The
+isolated worker's `initialize` operation constructs the hand planner and runs
+its dependency warmup. Successful initialization establishes dependency
+construction and warmup only; it does not plan or execute a physical grasp.
+
+Before starting the interpreter, set the standard `TMPDIR` variable to a fresh
+writable attempt directory outside the checkout. Worker request files retained
+there after a failure can then be inspected and replayed using the same declared
+inputs. Keep each attempt's temporary files with its outputs.
