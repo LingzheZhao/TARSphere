@@ -22,11 +22,11 @@ class FixjointHand:
         return None
 
     def bound_object_and_robot(self, goal_prim_path, robot_prim_path):
-        import omni
+        from isaacsim.core.utils.prims import get_prim_at_path
 
         if "right" in robot_prim_path:
             deactivate_collider(
-                omni.isaac.core.utils.prims.get_prim_at_path(goal_prim_path)
+                get_prim_at_path(goal_prim_path)
             )
             create_joint(
                 prim_path=goal_prim_path + "/pick_joint",  # joint path(will be created)
@@ -37,7 +37,7 @@ class FixjointHand:
             )
         elif "left" in robot_prim_path:
             deactivate_collider(
-                omni.isaac.core.utils.prims.get_prim_at_path(goal_prim_path)
+                get_prim_at_path(goal_prim_path)
             )
             create_joint(
                 prim_path=goal_prim_path + "/pick_joint",  # joint path(will be created)
@@ -48,10 +48,10 @@ class FixjointHand:
             )
 
     def unbound_object_and_robot(self, goal_prim_path, robot_prim_path):
-        import omni
+        from isaacsim.core.utils.prims import get_prim_at_path
 
         self.stage.RemovePrim(goal_prim_path + "/pick_joint")
-        activate_collider(omni.isaac.core.utils.prims.get_prim_at_path(goal_prim_path))
+        activate_collider(get_prim_at_path(goal_prim_path))
 
     def calculate_nearest_object(self, robot):
         """

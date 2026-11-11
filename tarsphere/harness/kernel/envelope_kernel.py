@@ -1654,6 +1654,14 @@ class EnvelopeKernel:
         if key_memories:
             lines.append("- key facts you chose to retain:")
             lines.extend(f"  {record.describe()}" for record in key_memories)
+        inspections = getattr(memory, "submitted_inspections", [])
+        if inspections:
+            lines.append("- Historical self-authored findings; reassess relevance after task changes:")
+        for inspection in inspections:
+            lines.append(
+                f"  Your submitted inspection (action {inspection['action_step']}, "
+                f"policy {inspection['policy_step']}): " + inspection["text"]
+            )
         grasped = list(getattr(memory, "grasped_hands", None) or [])
         held_labels = {
             " ".join(str(getattr(item, "target_label", "")).split()).casefold()

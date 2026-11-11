@@ -1,0 +1,9 @@
+episode: episodes/case/navigate_and_report/task_update.yaml
+target_object_id: bottle/model_8706a0faaed0dbfdea138d3f173c0de7_0
+# Offline resets, never navigation outcomes. Bedroom heading is an explicit diagnostic assumption.
+poses:
+  - label: original
+  - label: terra_search
+    xy_yaw: [3.1821, 1.5508, 1.378]
+  - label: author_bedroom_same_heading
+    xy_yaw: [2.597672700881958, 2.653996229171753, 1.378]

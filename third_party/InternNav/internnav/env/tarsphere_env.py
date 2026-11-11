@@ -10,6 +10,15 @@ from internnav.env.utils.episode_loader import (
 )
 
 
+def _configure_visible_device(local_rank):
+    """Retain the validated single-device UUID in the isolated demo lane."""
+    if os.environ.get("TARSPHERE_DEMO_GPU_UUID", ""):
+        from tarsphere.infra.simulation.demo_gpu import resolve_demo_gpu_mapping
+        resolve_demo_gpu_mapping()
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(local_rank)
+
+
 @base.Env.register('tarsphere')
 class TARSphereEnv(base.Env):
     def __init__(self, env_config: EnvCfg, task_config: TaskCfg):
@@ -43,7 +52,7 @@ class TARSphereEnv(base.Env):
         task_settings.update({'episodes': self.episodes})
 
         # set visible device for isaac sim
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(env_settings.get('local_rank', 0))
+        _configure_visible_device(env_settings.get('local_rank', 0))
 
         config = Config(
             simulator=SimConfig(**env_settings),

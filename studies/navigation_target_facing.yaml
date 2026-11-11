@@ -1,0 +1,17 @@
+# Offline target-facing views; resets never count as navigation.
+episode: episodes/case/navigate_and_report/task_update.yaml
+target_object_id: bottle/model_8706a0faaed0dbfdea138d3f173c0de7_0
+poses:
+- label: author_bedroom_target_facing
+  xy_yaw:
+  - 2.597672700881958
+  - 2.653996229171753
+  - 3.131830554316253
+- label: terra_search_target_facing
+  xy_yaw:
+  - 3.1821
+  - 1.5508
+  - 2.4421876968966663
+diagnostic_prim_paths:
+- /World/env_0/scene/Meshes/Furnitures/picture/model_4b19c5e00e50db5d01a9b87b6a0a2cf7_0
+- /World/env_0/scene/Meshes/Furnitures/shelf/model_2305faa8eb5817f3cdc9659b66c82f27_0

@@ -18,7 +18,7 @@ PICKABLE_CONSTANT_BASE_COLOUR_OPACITY = 1.0
 PICKABLE_PRESERVE_AUTHORED_OPACITY_AT_OR_BELOW = 0.05
 
 
-def reset_rigid_body_to_authored_pose(stage: Any, prim_path: str) -> None:
+def reset_rigid_body_to_authored_pose(stage: Any, prim_path: str, *, world: Any) -> None:
     """Teleport a registered body for episode initialization, not locomotion.
 
     USD edits to a live kinematic body are motion targets, not a physical
@@ -43,12 +43,14 @@ def reset_rigid_body_to_authored_pose(stage: Any, prim_path: str) -> None:
     imaginary = quaternion.GetImaginary()
     pose = np.asarray([[*position, *imaginary, quaternion.GetReal()]], dtype=np.float32)
 
-    import omni.physics.tensors as tensors
+    # The runner owns stage attachment and physics initialization. Creating a
+    # second standalone tensor backend is invalid after the 6.2 lifecycle reset.
+    simulation = getattr(world, "physics_sim_view", None)
+    if simulation is None:
+        raise RuntimeError("Pickable reset requires the initialized World physics view")
     from omni.physx import get_physx_simulation_interface
 
     get_physx_simulation_interface().flush_changes()
-    simulation = tensors.create_simulation_view("numpy")
-    simulation.set_subspace_roots("/")
     body = simulation.create_rigid_body_view(prim_path)
     if body.count != 1:
         raise RuntimeError(
@@ -63,17 +65,23 @@ def reset_rigid_body_to_authored_pose(stage: Any, prim_path: str) -> None:
         f"[PICKABLE-PHYSICS] reset body={prim_path} collision_shapes={shape_count}",
         flush=True,
     )
-    indices = np.asarray([0], dtype=np.uint32)
-    body.set_transforms(pose, indices)
+    backend = world.backend_utils
+    device = world.device
+    # Match the core rigid-prim index path; backend.convert does not support
+    # uint32 in Isaac 6.2 (it silently returns None).
+    indices = backend.resolve_indices([0], body.count, device=device)
+    native_pose = backend.convert(pose, device=device, dtype="float32")
+    body.set_transforms(native_pose, indices)
     rigid_body = UsdPhysics.RigidBodyAPI(prim)
     if rigid_body.GetKinematicEnabledAttr().Get():
         # PhysX derives kinematic velocity from the target; a matching target
         # removes the relocation sweep. Explicit velocity setters are illegal
         # for kinematic bodies.
-        body.set_kinematic_targets(pose, indices)
+        body.set_kinematic_targets(native_pose, indices)
     else:
-        body.set_velocities(np.zeros((1, 6), dtype=np.float32), indices)
-    measured = body.get_transforms()
+        body.set_velocities(backend.convert(np.zeros((1, 6), dtype=np.float32),
+            device=device, dtype="float32"), indices)
+    measured = backend.to_numpy(body.get_transforms())
     if not np.allclose(measured[:, :3], pose[:, :3], rtol=0.0, atol=1e-5):
         raise RuntimeError(
             f"PhysX pickable reset disagrees with USD: {prim_path}, "

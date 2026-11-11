@@ -2,11 +2,11 @@
 
 [中文说明](TELEOPERATION.zh-CN.md) · [Installation](INSTALLATION.md)
 
-Control the robot and animated NPCs interactively in a TARSphere scene. The operator supplies keyboard input or terminal commands. Robot motion uses the physical controller; NPC motion uses the native animation controller and NavMesh. Walking, turning, posture control, and NPC actions do not call a language model. Video and still captures are optional.
+Control the robot and animated NPCs interactively in a TARSphere scene. The operator supplies keyboard input or terminal commands. Robot motion uses the physical controller; NPC motion uses the installed SDK animation controller and NavMesh. Walking, turning, posture control, and NPC actions do not call a language model. Video and still captures are optional.
 
 ## Start a session
 
-Prepare the Linux NVIDIA runtime and external assets using the [installation guide](INSTALLATION.md). Configure `host_env.sh` with the Isaac Sim 5.1 SDK, project Python environment, and asset paths. NPC assets must include the rigged character and native animation resources described in [assets](../assets/README.md).
+Prepare the Linux NVIDIA runtime and external assets using the [installation guide](INSTALLATION.md). Configure `host_env.sh` with the Isaac Sim 5.1 SDK, project Python environment, and asset paths. NPC assets must include the rigged character and SDK animation resources described in [assets](../assets/README.md).
 
 From the repository root:
 
@@ -22,7 +22,18 @@ For a server without a desktop window:
 scripts/teleop.sh --headless --episode examples/episodes/navigation.yaml
 ```
 
-Headless sessions accept terminal commands over SSH. Keyboard and GUI camera switching require a visible Isaac window. `--stream` enables Isaac Sim's native livestream transport. Ordinary robot and NPC control does not require agent API credentials or running perception/navigation model services.
+Headless sessions accept terminal commands over SSH. Keyboard and GUI camera switching require a visible Isaac window. `--stream` enables Isaac Sim's SDK livestream transport. Ordinary robot and NPC control does not require agent API credentials or running perception/navigation model services.
+
+For Isaac Sim 6.2, use the [explicit SDK environment](isaac62-launch.md)
+instead of the 5.1 activation above. Stage the SDK `HumanMotionLibrary.usd` and
+set `TARSPHERE_BEHAVIOR_MOTION_LIBRARY` to its path. The animation backend selects
+SDK behavior agents when the legacy People extension is absent. GoTo, Idle,
+Listen and speech are the exercised subset. `look` requests LookAround, which
+is not in that subset. `sit` and other unsupported
+actions fail explicitly on this backend; the command table below also describes
+the legacy People implementation. The out-and-return check does not establish
+full skeletal fidelity. Physical grasping on 6.2 remains infrastructure blocked,
+with no verified grasp success.
 
 ## Choose who to control
 
@@ -61,7 +72,7 @@ While `human Nora` is active, use the window keys to walk Nora. Switch back with
 
 Motion keys combine. Releasing one key preserves the others. Short U/O taps are retained for at least 0.15 seconds of simulation time. Switching control or issuing a terminal command clears held motion keys, so press them again to resume walking.
 
-Each NPC has its own control heading. U/O changes that heading; a walking animation turns and travels toward the requested target. It does not rotate the character in place. NPC movement is admitted through native NavMesh and animation actions; a rejected destination leaves the NPC in its current physical state. The terminal reports rejection feedback.
+Each NPC has its own control heading. U/O changes that heading; a walking animation turns and travels toward the requested target. It does not rotate the character in place. NPC movement is admitted through SDK NavMesh and animation actions; a rejected destination leaves the NPC in its current physical state. The terminal reports rejection feedback.
 
 ## Robot commands
 
@@ -91,18 +102,18 @@ Enter `grasp <visual description>` in the terminal. The current ego RGB-D is use
 
 | Command | Effect |
 | --- | --- |
-| `goto <id> <x> <y> [z] [end_rot]` | Walk to a world-coordinate destination through NavMesh and native animation. If omitted, z uses the current NPC height; optional `end_rot` is native character yaw in degrees. |
-| `look <id> [seconds]` | Run the native looking action. |
-| `idle <id>` | Request the native idle action. |
-| `sit <id> <seat_prim_path> [seconds]` | Approach and sit at a seat supported by the scene and native animation controller. |
+| `goto <id> <x> <y> [z] [end_rot]` | Walk to a world-coordinate destination through NavMesh and SDK animation. If omitted, z uses the current NPC height; optional `end_rot` is SDK character yaw in degrees. |
+| `look <id> [seconds]` | Request LookAround (legacy People only; unsupported by the 6.2 behavior backend). |
+| `idle <id>` | Request the SDK idle action. |
+| `sit <id> <seat_prim_path> [seconds]` | Approach and sit at a seat supported by the scene and SDK animation controller. |
 
 Choose NPC IDs with `list`. For `goto`, select a reachable point on the scene's walkable surface; for `sit`, use the seat's actual USD prim path. `executed=True` means the controller accepted the request. Walking or sitting may still be in progress: allow simulation time to pass and inspect `status` for completion or failure.
 
-NPC control always uses the animation backend. Keyboard commands become native walking targets; they do not teleport characters or replace the animation controller with kinematic motion.
+NPC control always uses the animation backend. Keyboard commands become SDK walking targets; they do not teleport characters or replace the animation controller with kinematic motion.
 
 ## Optional captures
 
-Enter `capture [label]` or press F8 to save a lossless 2560×1920 robot-eye PNG. Labels use letters, digits, `_`, or `-`. `--capture-width` and `--capture-height` set another resolution; `--capture-layers` adds transparent PNGs for visible actors using native instance segmentation.
+Enter `capture [label]` or press F8 to save a lossless 2560×1920 robot-eye PNG. Labels use letters, digits, `_`, or `-`. `--capture-width` and `--capture-height` set another resolution; `--capture-layers` adds transparent PNGs for visible actors using SDK instance segmentation.
 
 Capture uses a temporary independent camera and verifies that physics time, robot/NPC poses, and the source cameras remain unchanged. It publishes the PNGs and metadata together, then releases its camera and render buffers.
 
@@ -117,9 +128,9 @@ Enter `help` to print commands or `quit` to close the session. Closing headless 
 | Symptom | Action |
 | --- | --- |
 | Motion keys have no effect | Focus the Isaac window, check the active actor with `status`, and press the keys again after a terminal command. |
-| NPC does not turn while standing | U/O selects its next walking direction; press a walking key to execute a native walk. |
-| NPC destination is rejected | Read terminal feedback, choose a reachable NavMesh point, and check that another native action is not still running. |
-| NPC or animation is missing | Check the episode's NPC IDs and rigged/native animation assets. |
+| NPC does not turn while standing | U/O selects its next walking direction; press a walking key to execute an SDK walk. |
+| NPC destination is rejected | Read terminal feedback, choose a reachable NavMesh point, and check that another SDK action is not still running. |
+| NPC or animation is missing | Check the episode's NPC IDs and rigged/SDK animation assets. |
 | Robot refuses motion while crouched | Enter `stand`, then retry the motion. |
 | Grasp is unavailable | Launch with `--with-grasp` after preparing the required services and physical task. |
 

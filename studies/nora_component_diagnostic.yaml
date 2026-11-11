@@ -1,0 +1,12 @@
+episode: episodes/case/navigate_and_report/task_update.yaml
+max_simulation_seconds: 45
+settle_seconds: 2
+capture_interval_seconds: 10
+capture_resolution: [640, 480]
+arrival_tolerance_m: 0.15
+question: Where is the study entrance, and how do I enter from the corridor?
+facts:
+  - fact_id: study_entrance_approach
+    text: Access is from the corridor, not through the dining area or the glass partition. The desk is on the right-hand side of the study as you enter from the corridor.
+outbound_target: [2.597672700881958, 2.653996229171753, 0.0]
+return_target: [-2.3, 0.04, 0.0]

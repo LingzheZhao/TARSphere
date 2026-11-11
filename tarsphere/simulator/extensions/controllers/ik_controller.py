@@ -163,7 +163,7 @@ class InverseKinematicsController(BaseController):
             - success: if solver converged successfully
             - finished: applied action has been finished
         """
-        from omni.isaac.core.utils.numpy.rotations import rot_matrices_to_quats
+        from isaacsim.core.utils.numpy.rotations import rot_matrices_to_quats
 
         ik_base_pose = self.get_ik_base_world_pose()
         self._kinematics_solver.set_robot_base_pose(

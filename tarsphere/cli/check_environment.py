@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib import metadata
 import os
 import shutil
 import subprocess
@@ -274,10 +275,71 @@ def _formal_episode_material_dependencies(
     return len(dependencies), missing
 
 
+def installed_sdk62_verification() -> Verification:
+    """Read installed SDK identity; missing metadata must fail closed."""
+    try:
+        version = metadata.version("isaacsim")
+    except metadata.PackageNotFoundError:
+        version = "missing installed isaacsim distribution"
+    return Verification(
+        "Installed Isaac Sim SDK is 6.2", version.startswith("6.2."), version
+    )
+
+
+def graspgenx_asset_verification() -> Verification:
+    default_root = (
+        REPOSITORY_ROOT
+        / "third_party"
+        / "GraspGenX"
+        / "ext"
+        / "graspgenx_checkpoints"
+        / "release"
+    )
+    default_assets = (
+        REPOSITORY_ROOT
+        / "third_party"
+        / "GraspGenX"
+        / "ext"
+        / "gripper_descriptions"
+        / "gripper_descriptions"
+        / "assets"
+    )
+    grasp_root = Path(
+        os.environ.get("TARSPHERE_GRASPGENX_CHECKPOINT_ROOT") or default_root
+    ).expanduser()
+    grasp_assets = Path(
+        os.environ.get("TARSPHERE_GRASPGENX_GRIPPER_ASSETS") or default_assets
+    ).expanduser()
+    return Verification(
+        "GraspGenX checkpoint and gripper assets are present",
+        all(
+            (
+                (grasp_root / "gen" / "config.yaml").is_file(),
+                (grasp_root / "dis" / "config.yaml").is_file(),
+                bool(list((grasp_root / "gen").glob("epoch_*.pth"))),
+                bool(list((grasp_root / "dis").glob("epoch_*.pth"))),
+                grasp_assets.is_dir(),
+            )
+        ),
+        f"checkpoints={grasp_root}; grippers={grasp_assets}",
+    )
+
+
+def xnavdp_client_verification() -> Verification:
+    from tarsphere.infra.navigation.x_navdp import XNavDPSettings
+
+    try:
+        settings = XNavDPSettings.from_environment()
+    except (RuntimeError, ValueError, FileNotFoundError) as error:
+        return Verification("Official X-NavDP client configuration is valid", False, str(error))
+    return Verification("Official X-NavDP client configuration is valid", True, settings.root)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     from tarsphere.cli.episode_inputs import DEFAULT_EPISODES, load_episode_inputs
 
+    parser.add_argument("--runtime", choices=("isaac51", "isaac62"), default="isaac51")
     parser.add_argument("--episodes", type=Path, default=DEFAULT_EPISODES)
     parser.add_argument("--episode-id", action="append")
     parser.add_argument(
@@ -286,6 +348,8 @@ def main() -> int:
         help="Also validate continuous-video BEV map assets",
     )
     args = parser.parse_args()
+    sdk62 = args.runtime == "isaac62"
+    expected_python = (3, 12) if sdk62 else (3, 11)
     minimum_cores, minimum_memory = SINGLE_SERVER_CAPACITY
     if str(REPOSITORY_ROOT) not in sys.path:
         sys.path.insert(0, str(REPOSITORY_ROOT))
@@ -304,8 +368,8 @@ def main() -> int:
     )
     checks.append(
         Verification(
-            "Python is 3.11",
-            sys.version_info[:2] == (3, 11),
+            f"Python is {expected_python[0]}.{expected_python[1]}",
+            sys.version_info[:2] == expected_python,
             sys.version.split()[0],
         )
     )
@@ -367,14 +431,17 @@ def main() -> int:
         if isaac_version_path.is_file()
         else "missing"
     )
-    checks.append(
-        Verification(
-            "ISAAC_SIM_PATH contains Isaac Sim 5.1 standalone",
-            isaac_version.startswith("5.1.")
-            and (isaac_root / "setup_conda_env.sh").is_file(),
-            f"{isaac_root} ({isaac_version})",
+    if sdk62:
+        checks.append(installed_sdk62_verification())
+    else:
+        checks.append(
+            Verification(
+                "ISAAC_SIM_PATH contains Isaac Sim 5.1 standalone",
+                isaac_version.startswith("5.1.")
+                and (isaac_root / "setup_conda_env.sh").is_file(),
+                f"{isaac_root} ({isaac_version})",
+            )
         )
-    )
 
     simulator_issues = runtime_issues()
     checks.append(
@@ -388,6 +455,23 @@ def main() -> int:
     formal_episodes = [
         episode for _, episode in load_episode_inputs(args.episodes, args.episode_id)
     ]
+    from tarsphere.evaluation.official import validate_formal_episode_runtime
+
+    budget_errors = []
+    for episode in formal_episodes:
+        try:
+            validate_formal_episode_runtime(episode)
+        except ValueError as exc:
+            budget_errors.append(str(exc))
+    checks.append(
+        Verification(
+            "Selected episodes preserve the formal runtime limits",
+            not budget_errors,
+            "; ".join(budget_errors)
+            if budget_errors
+            else f"{len(formal_episodes)} episodes",
+        )
+    )
     expected_scene_count = len(
         {episode.scene.asset_path for episode in formal_episodes}
     )
@@ -466,6 +550,8 @@ def main() -> int:
         )
     )
 
+    checks.append(xnavdp_client_verification())
+
     checkpoint_variables = (
         "TARSPHERE_SAM3_CHECKPOINT",
         "TARSPHERE_XNAVDP_CHECKPOINT",
@@ -484,38 +570,7 @@ def main() -> int:
         )
     )
 
-    grasp_root = (
-        REPOSITORY_ROOT
-        / "third_party"
-        / "GraspGenX"
-        / "ext"
-        / "graspgenx_checkpoints"
-        / "release"
-    )
-    grasp_assets = (
-        REPOSITORY_ROOT
-        / "third_party"
-        / "GraspGenX"
-        / "ext"
-        / "gripper_descriptions"
-        / "gripper_descriptions"
-        / "assets"
-    )
-    checks.append(
-        Verification(
-            "GraspGenX checkpoint and gripper assets are present",
-            all(
-                (
-                    (grasp_root / "gen" / "config.yaml").is_file(),
-                    (grasp_root / "dis" / "config.yaml").is_file(),
-                    bool(list((grasp_root / "gen").glob("epoch_*.pth"))),
-                    bool(list((grasp_root / "dis").glob("epoch_*.pth"))),
-                    grasp_assets.is_dir(),
-                )
-            ),
-            f"checkpoints={grasp_root}; grippers={grasp_assets}",
-        )
-    )
+    checks.append(graspgenx_asset_verification())
 
     if asset_root.is_dir():
         free_storage_gib = shutil.disk_usage(asset_root).free / (1024**3)

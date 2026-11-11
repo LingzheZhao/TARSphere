@@ -1,3 +1,8 @@
+> **Fork status:** the `codex/isaac62-reproduction` branch adds a verified Isaac
+> Sim 6.2 compatibility path with a verified published navigation-and-report task.
+> See [setup, measured outcomes and limits](docs/ISAAC_SIM_6_2.md).
+> The original author instructions and Isaac 5.1 benchmark scope below are retained.
+
 <div align="center">
 
 <picture>
@@ -58,7 +63,7 @@ Connect multimodal reasoning to physical robot execution, embodied human interac
 
 **Single RTX 4090 · Ubuntu 22.04 / 24.04 · Isaac Sim 5.1 · Python 3.11**
 
-The default deployment uses one GPU and one Isaac worker. Agent and support language models run through remote OpenAI-compatible APIs; perception, navigation, and grasp services run locally.
+The default deployment uses one GPU and one Isaac worker. Agent and support language models run through remote OpenAI-compatible APIs; perception, navigation, and grasp services run locally. An optional [Codex actor adapter](examples/codex_actor/README.md) connects the Terra actor through an existing Codex login.
 
 **1. Prepare.** Install Isaac Sim and the [assets and checkpoints](assets/README.md), then fill the host template with your paths and model endpoints. Follow the [installation guide](docs/INSTALLATION.md) for Conda, system dependencies, and resource layout.
 

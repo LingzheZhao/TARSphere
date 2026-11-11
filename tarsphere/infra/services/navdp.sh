@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 : "${TARSPHERE_PYTHON:?Set TARSPHERE_PYTHON in the host environment.}"
-PYTHON_BIN="${TARSPHERE_PYTHON}"
+PYTHON_BIN="${TARSPHERE_XNAVDP_PYTHON:-${TARSPHERE_PYTHON}}"
 XNAV_ROOT="${TARSPHERE_XNAVDP_ROOT:-${ROOT}/third_party/NavDP/baselines/x-navdp}"
 XNAV_CHECKPOINT="${TARSPHERE_XNAVDP_CHECKPOINT:-${ROOT}/assets/models/x-navdp/x-navdp_posttrain.ckpt}"
 XNAV_PORT="${TARSPHERE_XNAVDP_PORT:?Set the scene-owned TARSPHERE_XNAVDP_PORT explicitly.}"

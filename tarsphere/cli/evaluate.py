@@ -443,30 +443,61 @@ def navdp_pid_file(port: int) -> Path:
     return state_dir / f"x-navdp-{port}.pid"
 
 
+def _process_identity(pid: int) -> tuple[str, str] | None:
+    """Linux process state and birth time; zombies have already terminated."""
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return fields[0], fields[19]
+
+
+def _reap_child_if_exited(pid: int) -> None:
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        pass  # A service started by the shell is usually not our direct child.
+
+
 def stop_navdp(port: int) -> None:
     path = navdp_pid_file(port)
     if not path.is_file():
         return
-    raw = "".join(character for character in path.read_text() if character.isdigit())
-    if not raw:
+    raw = path.read_text().strip()
+    if not raw.isdecimal():
+        raise RuntimeError(f"Invalid X-NavDP PID file: {path}")
+    pid = int(raw)
+    if pid <= 0:
+        raise RuntimeError(f"Invalid X-NavDP PID: {pid}")
+    identity = _process_identity(pid)
+    if identity is None or identity[0] in ("Z", "X"):
+        _reap_child_if_exited(pid)
         path.unlink(missing_ok=True)
         return
-    pid = int(raw)
     try:
-        command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
     except (FileNotFoundError, ProcessLookupError):
         path.unlink(missing_ok=True)
         return
-    if (
-        b"eval.src.policy_server" not in command
-        or f"--port {port}".encode() not in command
-    ):
+    expected_port = str(port).encode()
+    port_matches = any(
+        token == b"--port" and index + 1 < len(command)
+        and command[index + 1] == expected_port
+        for index, token in enumerate(command)
+    )
+    if b"eval.src.policy_server" not in command or not port_matches:
         raise RuntimeError(f"Refusing to stop PID {pid}; it is not X-NavDP port {port}")
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(100):
+    # Check for a changed process identity before signalling.
+    current = _process_identity(pid)
+    if current is not None and current[1] == identity[1] and current[0] not in ("Z", "X"):
         try:
-            os.kill(pid, 0)
+            os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
+            pass
+    for _ in range(100):
+        current = _process_identity(pid)
+        if current is None or current[0] in ("Z", "X") or current[1] != identity[1]:
+            _reap_child_if_exited(pid)
             break
         time.sleep(0.1)
     else:
@@ -1045,8 +1076,17 @@ def schedule_document(
 def worker_environment(
     slot: WorkerSlot, port: int, cache_root: Path, cpu_threads: int
 ) -> dict[str, str]:
+    from tarsphere.infra.simulation.demo_gpu import resolve_demo_gpu_mapping
+
     environment = dict(os.environ)
-    environment.pop("CUDA_VISIBLE_DEVICES", None)
+    demo_mapping = resolve_demo_gpu_mapping(environment)
+    if demo_mapping is not None and slot.gpu != demo_mapping["physical_gpu"]:
+        raise RuntimeError(
+            f"Worker physical GPU {slot.gpu} differs from the verified demo "
+            f"GPU {demo_mapping['physical_gpu']}."
+        )
+    if demo_mapping is None:
+        environment.pop("CUDA_VISIBLE_DEVICES", None)
     environment.update(
         {
             "PYTHONPATH": f"{ROOT}:{environment.get('PYTHONPATH', '')}",
@@ -1069,6 +1109,16 @@ def worker_environment(
             "OMNI_USER_CACHE": str(cache_root / "ov" / slot.name),
         }
     )
+    if demo_mapping is not None:
+        # Kit and resource locks use the physical index; CUDA consumers see
+        # the single verified UUID as local device zero.
+        environment.update(
+            {
+                "TARSPHERE_WORKER_CUDA_VISIBLE_DEVICES": demo_mapping["uuid"],
+                "TARSPHERE_MODEL_GPU": "0",
+                "TARSPHERE_FRONTIERNET_DEVICE": "cuda:0",
+            }
+        )
     return environment
 
 
@@ -1076,6 +1126,7 @@ def worker_command(
     schedule_path: Path,
     *,
     evaluate_after_rollout: bool = True,
+    record_video: bool = False,
     harness_config=None,
 ) -> list[str]:
     command = [
@@ -1095,6 +1146,8 @@ def worker_command(
     ]
     if evaluate_after_rollout:
         command.append("--evaluate-after-rollout")
+    if record_video:
+        command.append("--record-video")
     if harness_config is None:
         from tarsphere.harness.harness import AgentHarnessConfig
 
@@ -1267,6 +1320,16 @@ def release_ready_jobs(jobs: list[EvaluationJob]) -> None:
             job.state = "queued"
 
 
+def enforce_worker_launch_limit(jobs: list[EvaluationJob], limit: int | None) -> None:
+    if limit is None:
+        return
+    for job in jobs:
+        if job.state in {"queued", "cooldown"} and job.launch_sequence >= limit:
+            job.state = "failed"
+            reason = f"worker launch limit exhausted ({limit})"
+            job.last_error = f"{job.last_error}; {reason}" if job.last_error else reason
+
+
 def job_record(job: EvaluationJob, output: Path) -> dict[str, Any]:
     total = sum(len(scene.models) * len(scene.episodes) for scene in job.scene_runs)
     physical_pending = pending_episode_count(output, job)
@@ -1300,6 +1363,12 @@ def build_parser() -> argparse.ArgumentParser:
     from tarsphere.harness.harness_cli import add_agent_harness_arguments
 
     add_agent_harness_arguments(parser)
+    parser.add_argument(
+        "--max-worker-launches",
+        type=int,
+        default=None,
+        help="Positive per-job worker launch limit (default: unlimited).",
+    )
     parser.add_argument(
         "--episodes",
         type=Path,
@@ -1336,6 +1405,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir", type=Path, default=Path.home() / ".local/share/tarsphere/runs"
     )
     parser.add_argument("--launch", action="store_true")
+    parser.add_argument(
+        "--record-video",
+        action="store_true",
+        help="Record each episode's continuous robot camera and navigation maps.",
+    )
     parser.add_argument(
         "--evaluate-after-rollout",
         action=argparse.BooleanOptionalAction,
@@ -1402,6 +1476,8 @@ def main(args: argparse.Namespace | None = None) -> None:
     from tarsphere.harness.harness_cli import agent_harness_config_from_args
 
     harness_config = agent_harness_config_from_args(args)
+    if args.max_worker_launches is not None and args.max_worker_launches < 1:
+        raise ValueError("--max-worker-launches must be positive")
     if args.max_tokens < 1:
         raise ValueError("--max-tokens must be positive")
     if args.max_starting_workers < 1:
@@ -1492,6 +1568,7 @@ def main(args: argparse.Namespace | None = None) -> None:
         git_head = ""
     plan = {
         "schema_version": "tarsphere.evaluation_plan.v7",
+        "record_video": args.record_video,
         "agent_harness_config": harness_config.as_dict(),
         "episode_input": str(args.episodes.resolve()),
         "episode_bindings": [
@@ -1733,6 +1810,7 @@ def main(args: argparse.Namespace | None = None) -> None:
     try:
         while running or any(job.state in retryable_states for job in jobs):
             release_ready_jobs(jobs)
+            enforce_worker_launch_limit(jobs, args.max_worker_launches)
             for slot_name, worker in list(running.items()):
                 refresh_worker_activity(worker, output)
                 if (
@@ -1837,6 +1915,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 del running[slot_name]
 
             release_ready_jobs(jobs)
+            enforce_worker_launch_limit(jobs, args.max_worker_launches)
             starting_count = sum(
                 not worker_is_primed(worker) for worker in running.values()
             )
@@ -1887,6 +1966,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 command = worker_command(
                     schedule_path,
                     evaluate_after_rollout=args.evaluate_after_rollout,
+                    record_video=args.record_video,
                     harness_config=harness_config,
                 )
                 log_path = worker_dir / f"worker_launch_{launch_sequence}.log"

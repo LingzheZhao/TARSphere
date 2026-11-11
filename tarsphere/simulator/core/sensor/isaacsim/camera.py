@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import omni.replicator.core as rep
-from omni.isaac.core.prims.xform_prim import XFormPrim
+from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
 from tarsphere.simulator.core.sensor.camera import ICamera
 

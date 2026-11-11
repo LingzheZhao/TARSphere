@@ -1031,7 +1031,11 @@ class IsaacAutonomousEnv:
                 route_resolver=self._resolve_kinematic_human_route,
                 pose_sync=self._sync_human_body_state,
             )
-        return AnimPeopleBodyExecutor(
+        from tarsphere.infra.control.behavior_human_executor import (
+            BehaviorHumanExecutor, uses_behavior_animation_sdk,
+        )
+        executor = BehaviorHumanExecutor if uses_behavior_animation_sdk() else AnimPeopleBodyExecutor
+        return executor(
             pose_sync=self._sync_human_body_state,
             default_character=DEFAULT_ISAAC_CHARACTER,
             capture_native_motion_trace=_bool_env(
@@ -1053,11 +1057,27 @@ class IsaacAutonomousEnv:
             if not route or math.dist(route[-1], target) > 1e-6:
                 raise ValueError("Live Robot-aware Human route must end at its target.")
             return route
+        from tarsphere.infra.control.physical_contracts import (
+            ROBOT_HUMAN_MOTION_CLEARANCE_M,
+        )
+
+        robot_position = self._robot_position()
+        if robot_position is None:
+            raise RobotPoseUnavailableError(
+                "Human route planning requires the live Robot position."
+            )
         planner = Planner(
             OfficialOccupancyBevMap(
                 occupancy_path=_compiled_occupancy_path(self.episode)
             ),
             clearance_radius_m=HUMAN_COLLISION_RADIUS_METERS,
+            world_exclusion_zones=[
+                (
+                    float(robot_position[0]),
+                    float(robot_position[1]),
+                    ROBOT_HUMAN_MOTION_CLEARANCE_M,
+                )
+            ],
             # Authoring certifies these static Human routes with a 30 s A*
             # budget. The generic 5 s online-navigation budget can expire
             # under full Isaac concurrency and report a reachable route as
@@ -1532,7 +1552,8 @@ class IsaacAutonomousEnv:
             # away from the authored direction.
             facing_offset_rad = HUMAN_CHARACTER_YAW_OFFSET_RAD
             for human in getattr(self.episode, "humans", []):
-                if self.human_motion_backend == "kinematic":
+                from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+                if self.human_motion_backend == "kinematic" or isinstance(self._human_body, BehaviorHumanExecutor):
                     continue
                 start_yaw = float(getattr(human, "start_yaw", 0.0) or 0.0)
                 if start_yaw == 0.0:
@@ -1868,25 +1889,13 @@ class IsaacAutonomousEnv:
             if obj.pickable
         )
 
-        made_static = 0
-        preserved_dynamic = 0
-        for prim in Usd.PrimRange.AllPrims(scene_root):
-            attr = prim.GetAttribute("physics:rigidBodyEnabled")
-            enabled = bool(attr.Get()) if attr and attr.IsValid() else False
-            if not enabled:
-                continue
-            prim_path = str(prim.GetPath())
-            if any(
-                prim_path == path or prim_path.startswith(path + "/")
-                for path in dynamic_object_paths
-            ):
-                preserved_dynamic += 1
-                continue
-            if not attr.Set(False):
-                raise RuntimeError(
-                    f"Cannot disable rigid-body dynamics for {prim_path}."
-                )
-            made_static += 1
+        from tarsphere.simulator.core.scene.isaacsim.scene import (
+            prepare_static_scene_bodies,
+        )
+
+        made_static, preserved_dynamic = prepare_static_scene_bodies(
+            Usd.PrimRange.AllPrims(scene_root), dynamic_object_paths
+        )
 
         self._static_scene_bodies_prepared = True
         print(
@@ -2187,7 +2196,7 @@ class IsaacAutonomousEnv:
             raise RuntimeError(
                 "Initial presentation streams have partial or stale captures."
             )
-        import omni.kit.loop._loop as omni_loop
+        from omni.kit.loop import _loop as omni_loop
         import omni.timeline
 
         loop = omni_loop.acquire_loop_interface()
@@ -9434,6 +9443,33 @@ class IsaacAutonomousEnv:
         )
         return transform
 
+    def warmup_manipulation_planner(self, receipt_path: Path) -> None:
+        """Initialize the isolated planner with private live pre-rollout state.
+
+        This validates dependencies before policy decisions; it neither plans a
+        target trajectory nor substitutes for the execution-time state reading.
+        """
+        from tarsphere.infra.manipulation.g1_grasp import G1GraspPlannerClient
+
+        receipt: Dict[str, Any] = {"state_source": "live_pre_rollout_articulation"}
+        try:
+            joints = self._g1_curobo_joint_positions()
+            height = self._g1_body_height_command()
+            receipt["current_joint_positions"] = joints
+            receipt["current_body_height_command_m"] = height
+            receipt["planner"] = G1GraspPlannerClient().initialize(
+                current_joint_positions=joints,
+                current_body_height_command_m=height,
+            )
+            receipt["status"] = "initialized"
+        except Exception as exc:
+            receipt["status"] = "failed"
+            receipt["failure"] = {"type": type(exc).__name__, "message": str(exc)}
+            raise
+        finally:
+            with Path(receipt_path).open("x", encoding="utf-8") as stream:
+                json.dump(receipt, stream, indent=2)
+
     def _g1_curobo_joint_positions(self) -> Dict[str, float]:
         """Read the complete live joint state required by G1 cuRobo."""
 
@@ -10047,7 +10083,7 @@ class IsaacAutonomousEnv:
         """
         if getattr(self, "human_motion_backend", "kinematic") == "animation":
             if timing in {"after", "error", "interrupted"}:
-                import omni.kit.loop._loop as omni_loop
+                from omni.kit.loop import _loop as omni_loop
 
                 # Native env.step may render via app.update(). The explicit
                 # 60 Hz human pump already accounts for elapsed physics time;
@@ -10157,7 +10193,7 @@ class IsaacAutonomousEnv:
             timing == "before"
             and getattr(self, "human_motion_backend", "kinematic") == "animation"
         ):
-            import omni.kit.loop._loop as omni_loop
+            from omni.kit.loop import _loop as omni_loop
 
             # Arm only after camera preparation succeeds: an observer error
             # before env.step must not leave the animation clock frozen.
@@ -10641,7 +10677,7 @@ class IsaacAutonomousEnv:
         preparer = PhysicalScenePreparer(preparation)
         self._physical_scene_preparer = preparer
         try:
-            diagnostics = preparer.apply(stage)
+            diagnostics = preparer.apply(stage, physics_world=self._env.runner._world)
         except Exception:
             self._restore_physical_scene_preparation()
             raise
@@ -10678,6 +10714,7 @@ class IsaacAutonomousEnv:
             objects,
             robot_root_path=root_path,
             object_local_unit_in_meters=self._scene_asset_unit_in_meters,
+            physics_world=self._env.runner._world,
             on_world_authored=self._invalidate_ego_snapshot,
         )
         executor.start()
@@ -10754,6 +10791,11 @@ class IsaacAutonomousEnv:
         return ensure_material_deduped_usd(scene_usd)
 
     def _create_env(self):
+        # The official SDK import injects Kit's Python and native search paths
+        # before simulator extensions import carb. Runner creates the app later;
+        # keep this bootstrap local so importing this module needs no SDK.
+        from isaacsim import SimulationApp  # noqa: F401
+
         t_create_start = time.monotonic()
         t0 = time.monotonic()
 
@@ -10858,6 +10900,10 @@ class IsaacAutonomousEnv:
             sensors=sensors,
         )
 
+        from tarsphere.infra.manipulation.g1_attachment import (
+            manipulation_objects_from_episode,
+        )
+
         config = Config(
             simulator=SimConfig(
                 physics_dt=1.0 / SIMULATION_PHYSICS_HZ,
@@ -10875,6 +10921,12 @@ class IsaacAutonomousEnv:
             task_configs=[
                 SingleInferenceTaskCfg(
                     scene_asset_path=str(scene_usd),
+                    scene_static=True,
+                    scene_dynamic_body_paths=[
+                        obj.prim_path
+                        for obj in manipulation_objects_from_episode(self.episode)
+                        if obj.pickable
+                    ],
                     scene_scale=self.episode.scene.scale,
                     robots=[robot],
                     objects=[],
@@ -11057,6 +11109,9 @@ class IsaacAutonomousEnv:
         _SIMULATOR_REP_CAMERA_PATCHED = True
 
     def _enable_anim_people_extensions(self):
+        if not self.episode.humans:
+            return
+
         """Enable official Isaac animated-people extensions and settings."""
         try:
             import carb
@@ -11084,6 +11139,13 @@ class IsaacAutonomousEnv:
                 "isaacsim.replicator.agent.core",
                 "omni.kit.mesh.raycast",
             )
+        from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+        if isinstance(self._human_body, BehaviorHumanExecutor):
+            required_extensions = (
+                "omni.anim.behavior.core",
+                "omni.anim.navigation.core",
+                "omni.kit.mesh.raycast",
+            )
         for extension in required_extensions:
             try:
                 result = manager.set_extension_enabled_immediate(extension, True)
@@ -11109,6 +11171,9 @@ class IsaacAutonomousEnv:
                 "/exts/isaacsim.replicator.agent/characters_parent_prim_path",
                 "/World/Characters",
             )
+            self._human_body.set_character_assets_path(str(asset_root))
+            return
+        if isinstance(self._human_body, BehaviorHumanExecutor):
             self._human_body.set_character_assets_path(str(asset_root))
             return
         from tarsphere.humans.runtime_capabilities import (
@@ -11199,7 +11264,14 @@ class IsaacAutonomousEnv:
         )
 
         import carb
-        import NavSchema
+        try:
+            import NavSchema
+        except ModuleNotFoundError as exc:
+            if exc.name != "NavSchema":
+                raise
+            # Isaac 6.x ships codeless registered schemas, not pxr wrappers.
+            import omni.anim.navigation.schema as navigation_schema
+            NavSchema = None
         import omni.anim.navigation.core as nav
         import omni.usd
         from pxr import Sdf, Usd, UsdGeom
@@ -11230,10 +11302,11 @@ class IsaacAutonomousEnv:
                 volume = preferred_volume
                 created_volume = False
             else:
-                volume = NavSchema.NavMeshVolume.Define(
-                    stage,
-                    ANIM_PEOPLE_NAVMESH_VOLUME_PATH,
-                ).GetPrim()
+                volume = (
+                    NavSchema.NavMeshVolume.Define(stage, ANIM_PEOPLE_NAVMESH_VOLUME_PATH).GetPrim()
+                    if NavSchema is not None
+                    else stage.DefinePrim(ANIM_PEOPLE_NAVMESH_VOLUME_PATH, navigation_schema.NAV_MESH_VOLUME)
+                )
                 created_volume = True
             if (
                 not volume
@@ -11244,11 +11317,16 @@ class IsaacAutonomousEnv:
                     f"Could not create {ANIM_PEOPLE_NAVMESH_VOLUME_PATH} for "
                     "omni.anim.people navigation."
                 )
-            volume_schema = NavSchema.NavMeshVolume(volume)
-            volume_type_attr = volume_schema.GetNavVolumeTypeAttr()
-            if volume_type_attr:
-                volume_type_attr.Set("Include")
-            NavSchema.NavMeshAreaAPI.Apply(volume)
+            if NavSchema is not None:
+                volume_type_attr = NavSchema.NavMeshVolume(volume).GetNavVolumeTypeAttr()
+                NavSchema.NavMeshAreaAPI.Apply(volume)
+            else:
+                # Same attribute and API used by SDK CreateNavMeshVolumeCommand.
+                volume_type_attr = volume.GetAttribute("nav:volume:type")
+                volume.ApplyAPI(navigation_schema.NAV_MESH_AREA_API)
+            if not volume_type_attr:
+                raise RuntimeError("Registered NavMeshVolume lacks its volume-type attribute")
+            volume_type_attr.Set("Include")
             area_attr = volume.GetAttribute("nav:area")
             if not area_attr:
                 area_attr = volume.CreateAttribute(
@@ -11633,7 +11711,7 @@ class IsaacAutonomousEnv:
 
                 SimulationManager._on_stop("tarsphere_navmesh_refresh")
                 self._reattach_physx_stage_for_runtime(stage)
-                SimulationManager._create_simulation_view("tarsphere_navmesh_refresh")
+                SimulationManager.initialize_physics()
                 physics_sim_view = getattr(world, "physics_sim_view", None)
             if physics_sim_view is None:
                 raise RuntimeError("World.physics_sim_view is None after refresh.")
@@ -12398,7 +12476,7 @@ class IsaacAutonomousEnv:
         ``simulation_context.py:460`` sets this from ``rendering_dt``, but only
         at construction time, and this environment builds the sim with
         ``rendering_dt = 1/240``.  Changing it afterwards therefore has to go
-        through ``omni.kit.loop._loop`` directly.
+        through the public ``omni.kit.loop`` bindings export directly.
 
         Physics is deliberately untouched: the Kit loop and
         ``_physics_context.set_physics_dt`` are separate clocks.  The physics dt
@@ -12413,7 +12491,7 @@ class IsaacAutonomousEnv:
             "physics_dt_source": None,
         }
         try:
-            import omni.kit.loop._loop as omni_loop
+            from omni.kit.loop import _loop as omni_loop
 
             loop = omni_loop.acquire_loop_interface()
         except Exception as exc:
@@ -12502,7 +12580,13 @@ class IsaacAutonomousEnv:
         cameras) are excluded so they do not become static NavMesh obstacles.
         """
         del center, scale
-        import NavSchema
+        try:
+            import NavSchema
+        except ModuleNotFoundError as exc:
+            if exc.name != "NavSchema":
+                raise
+            import omni.anim.navigation.schema as navigation_schema
+            NavSchema = None
         from pxr import UsdGeom
 
         excluded = 0
@@ -12538,13 +12622,17 @@ class IsaacAutonomousEnv:
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
             try:
                 if should_exclude:
-                    NavSchema.NavMeshExcludeAPI.Apply(prim)
+                    if NavSchema is not None:
+                        NavSchema.NavMeshExcludeAPI.Apply(prim)
+                    else:
+                        prim.ApplyAPI(navigation_schema.NAV_MESH_EXCLUDE_API)
                     excluded += 1
                     if len(excluded_samples) < 5:
                         excluded_samples.append(f"{path} ({reason})")
                 else:
                     try:
-                        prim.RemoveAPI(NavSchema.NavMeshExcludeAPI)
+                        prim.RemoveAPI(NavSchema.NavMeshExcludeAPI if NavSchema is not None
+                                       else navigation_schema.NAV_MESH_EXCLUDE_API)
                     except Exception as exc:
                         failed.append(f"{path} remove NavMeshExcludeAPI: {exc}")
                     included += 1
@@ -13795,7 +13883,7 @@ class IsaacAutonomousEnv:
             [0.0, 0.0, HUMAN_COLLISION_HEIGHT_METERS * 0.5], dtype=float
         )
         try:
-            from omni.isaac.core.prims.xform_prim import XFormPrim
+            from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
             proxy = XFormPrim(proxy_path)
             proxy.set_world_pose(
@@ -13892,7 +13980,7 @@ class IsaacAutonomousEnv:
                 )
 
         try:
-            from omni.isaac.core.prims.xform_prim import XFormPrim
+            from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
             prim = XFormPrim(camera_path)
             prim.set_world_pose(

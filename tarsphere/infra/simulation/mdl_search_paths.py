@@ -273,8 +273,8 @@ def normalize_relative_material_texture_asset(
 
     Stripping ``./`` from ``info:mdl:sourceAsset`` is not enough: UsdToMdl then
     still receives the leftover ``./Materials/Textures`` inputs and the working
-    set never goes idle.  This rewrites those texture assets to a path
-    relative to the layer that lands on the collection Materials tree.
+    set never goes idle. Use the absolute target so symlinked layer aliases
+    with a different directory depth resolve the same collection texture.
     """
     text = str(path).strip().replace("\\", "/")
     if text.startswith("./"):
@@ -289,17 +289,7 @@ def normalize_relative_material_texture_asset(
         return stripped if text.startswith("./") else None
     collection_root = materials_dir.resolve().parent
     target = (collection_root / stripped).resolve()
-    if layer_path is None:
-        return str(target)
-    try:
-        rewritten = Path(
-            os.path.relpath(target, layer_path.parent.resolve())
-        ).as_posix()
-    except ValueError:
-        rewritten = str(target)
-    if rewritten == text:
-        return None
-    return rewritten
+    return str(target)
 
 
 def rewrite_relative_mdl_source_assets_in_layer(

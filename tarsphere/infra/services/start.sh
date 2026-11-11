@@ -6,12 +6,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 : "${TARSPHERE_PYTHON:?Set TARSPHERE_PYTHON in the host environment.}"
 PYTHON_BIN="${TARSPHERE_PYTHON}"
+SAM3_PYTHON="${TARSPHERE_SAM3_PYTHON:-${PYTHON_BIN}}"
 GRASP_PYTHON="${TARSPHERE_GRASPGENX_PYTHON:-${PYTHON_BIN}}"
 MODEL_GPU="${TARSPHERE_MODEL_SERVICE_GPU:-0}"
 SAM3_HOST="${TARSPHERE_SAM3_HOST:-127.0.0.1}"
 SAM3_PORT="${TARSPHERE_SAM3_PORT:-5558}"
 GRASP_HOST="${TARSPHERE_GRASPGENX_HOST:-127.0.0.1}"
-GRASP_PORT="${TARSPHERE_GRASPGENX_PORT:-5557}"
+GRASP_PORT="${TARSPHERE_GRASPGENX_PORT:-5556}"
 HOST_ID="$(hostname -s | tr -cd '[:alnum:]_.-')"
 STATE_ROOT="${TARSPHERE_MODEL_SERVICE_STATE_DIR:-${HOME}/.cache/tarsphere/${HOST_ID}/model_services}"
 CHECK_ONLY=0
@@ -27,7 +28,7 @@ Environment:
   TARSPHERE_MODEL_SERVICE_GPU       Physical GPU index (default: 0)
   TARSPHERE_SAM3_CHECKPOINT         Required SAM3.1 checkpoint
   TARSPHERE_SAM3_HOST/PORT          Shared SAM3 endpoint (127.0.0.1:5558)
-  TARSPHERE_GRASPGENX_HOST/PORT     Shared GraspGenX endpoint (127.0.0.1:5557)
+  TARSPHERE_GRASPGENX_HOST/PORT     Shared GraspGenX endpoint (127.0.0.1:5556)
   TARSPHERE_MODEL_SERVICE_STATE_DIR Host-local PID and log directory
 EOF
 }
@@ -127,12 +128,20 @@ else
   : > "${SAM3_LOG}"
   nohup setsid env CUDA_VISIBLE_DEVICES="${MODEL_GPU}" \
     PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
-    "${PYTHON_BIN}" -m tarsphere.infra.services.sam3 \
+    "${SAM3_PYTHON}" -m tarsphere.infra.services.sam3 \
       --host "${SAM3_HOST}" --port "${SAM3_PORT}" \
       --checkpoint "${TARSPHERE_SAM3_CHECKPOINT}" \
       > "${SAM3_LOG}" 2>&1 < /dev/null &
   echo "$!" > "${SAM3_PID_FILE}"
   echo "[MODELS] Starting SAM3 on GPU ${MODEL_GPU}; pid=$!."
+fi
+
+GRASP_ARGS=()
+if [[ -n "${TARSPHERE_GRASPGENX_CHECKPOINT_ROOT:-}" ]]; then
+  GRASP_ARGS+=(--checkpoint-root "${TARSPHERE_GRASPGENX_CHECKPOINT_ROOT}")
+fi
+if [[ -n "${TARSPHERE_GRASPGENX_GRIPPER_ASSETS:-}" ]]; then
+  GRASP_ARGS+=(--gripper-assets "${TARSPHERE_GRASPGENX_GRIPPER_ASSETS}")
 fi
 
 if grasp_healthy; then
@@ -142,7 +151,7 @@ else
   : > "${GRASP_LOG}"
   nohup setsid env -u PYTHONPATH CUDA_VISIBLE_DEVICES="${MODEL_GPU}" \
     "${GRASP_PYTHON}" "${ROOT}/tarsphere/infra/services/graspgenx.py" \
-      --host "${GRASP_HOST}" --port "${GRASP_PORT}" \
+      --host "${GRASP_HOST}" --port "${GRASP_PORT}" "${GRASP_ARGS[@]}" \
       > "${GRASP_LOG}" 2>&1 < /dev/null &
   echo "$!" > "${GRASP_PID_FILE}"
   echo "[MODELS] Starting GraspGenX on GPU ${MODEL_GPU}; pid=$!."

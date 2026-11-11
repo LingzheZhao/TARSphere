@@ -2139,9 +2139,11 @@ class G1GraspPlannerClient:
         worker_script: Path | None = None,
         timeout_s: float = G1_GRASP_PLANNING_TIMEOUT_S,
     ) -> None:
-        # Python environment containing the pinned cuRoboV2 checkout.
+        # Preserve the venv entry point: resolving its Python symlink selects
+        # the base interpreter and loses that environment's installed Torch.
         self.python_executable = (
-            Path(python_executable or sys.executable).expanduser().resolve()
+            Path(python_executable or os.environ.get("TARSPHERE_CUROBO_PYTHON") or sys.executable)
+            .expanduser().absolute()
         )
         repository_root = Path(__file__).resolve().parents[3]
         # Small process entry point; it never imports Isaac or its Warp build.
@@ -2164,6 +2166,17 @@ class G1GraspPlannerClient:
             raise FileNotFoundError(
                 f"G1 cuRoboV2 worker not found: {self.worker_script}"
             )
+
+    def initialize(self, *, current_joint_positions: Mapping[str, float],
+                   current_body_height_command_m: float,
+                   hand: str = G1_MANIPULATION_HAND) -> dict[str, Any]:
+        """Construct and warm the actual isolated planner before model actions.
+
+        Uses measured robot joints; it neither plans nor executes a trajectory.
+        """
+        return self._run_worker({"operation": "initialize", "hand": hand,
+            "current_joint_positions": dict(current_joint_positions),
+            "current_body_height_command_m": float(current_body_height_command_m)})
 
     def plan(
         self,
@@ -2427,8 +2440,13 @@ class G1GraspPlannerClient:
                     "/usr/lib/x86_64-linux-gnu",
                 )
             ),
-            "CUDA_HOME": "/usr/local/cuda",
         }
+        # cuda.pathfinder understands the standard toolkit variables. Keep an
+        # explicitly provisioned real toolkit root; otherwise let it discover
+        # installed NVIDIA wheels rather than force a nonexistent system root.
+        for name in ("CUDA_HOME", "CUDA_PATH"):
+            if os.environ.get(name):
+                environment[name] = os.environ[name]
         worker_cuda = os.environ.get(
             "TARSPHERE_WORKER_CUDA_VISIBLE_DEVICES",
             "",
@@ -3611,6 +3629,13 @@ def _require_curobo_v2() -> None:
         supported = Version(version).release == (0, 8, 0)
     except InvalidVersion:
         supported = False
+    # The frozen bundled v0.8.0 source has no distribution metadata. Its
+    # official version helper returns this exact sentinel in that case.
+    # Only accept it from this checkout's audited source, never another install.
+    if not supported and version == "v0.8.0-no-tag":
+        bundled = Path(__file__).resolve().parents[3] / "third_party/curobo/curobo/__init__.py"
+        module_path = getattr(curobo, "__file__", None)
+        supported = module_path is not None and Path(module_path).resolve() == bundled.resolve()
     if not supported:
         raise RuntimeError(
             f"TARSphere requires cuRobo {CUROBO_V2_VERSION}; "

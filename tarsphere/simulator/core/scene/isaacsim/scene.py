@@ -11,8 +11,8 @@ class IsaacsimScene(IScene):
     """IsaacSim's implementation on `IScene` class."""
 
     def __init__(self):
-        from omni.isaac.core import World
-        from omni.isaac.core.scenes import Scene
+        from isaacsim.core.api import World
+        from isaacsim.core.api.scenes import Scene
 
         self._scene: Scene = World.instance().scene
 
@@ -22,7 +22,7 @@ class IsaacsimScene(IScene):
         prim_path_root = f"World/env_{env_id}/scene"
         source, prim_path = validate_scene_file(usd_path, prim_path_root)
 
-        from omni.isaac.core.utils.prims import create_prim
+        from isaacsim.core.utils.prims import create_prim
 
         position = [
             env_offset[idx] + i for idx, i in enumerate(task_config.scene_position)
@@ -33,6 +33,18 @@ class IsaacsimScene(IScene):
             scale=task_config.scene_scale,
             translation=position,
         )
+        # Prepare immutable geometry before BaseTask constructs dynamic-body
+        # wrappers. Wrapping mirrored furniture first can decompose reflected
+        # transforms and fail even though its static collision mesh is valid.
+        if task_config.scene_static:
+            from pxr import Usd
+
+            # Hold declared pickables before BaseTask wraps bodies or reset
+            # advances physics; the grasp executor later enables their motion.
+            prepare_scene_pickables(scene_prim, task_config.scene_dynamic_body_paths)
+            prepare_static_scene_bodies(
+                Usd.PrimRange.AllPrims(scene_prim), task_config.scene_dynamic_body_paths
+            )
         self.scene_prim = scene_prim
 
     def add(self, target: any):
@@ -65,3 +77,42 @@ class IsaacsimScene(IScene):
     def unwrap(self):
         """See `IScene.unwrap` for documentation."""
         return self._scene
+
+
+def prepare_static_scene_bodies(prims, dynamic_body_paths):
+    """Disable immutable body dynamics without changing transforms or collisions."""
+    dynamic_paths = tuple(path.rstrip("/") for path in dynamic_body_paths)
+    made_static = preserved_dynamic = 0
+    for prim in prims:
+        enabled = prim.GetAttribute("physics:rigidBodyEnabled")
+        if not enabled or not enabled.IsValid() or not enabled.Get():
+            continue
+        path = str(prim.GetPath())
+        if any(path == root or path.startswith(root + "/") for root in dynamic_paths):
+            preserved_dynamic += 1
+            continue
+        if not enabled.Set(False):
+            raise RuntimeError(f"Cannot disable immutable scene body {path}")
+        made_static += 1
+    return made_static, preserved_dynamic
+
+
+def prepare_scene_pickables(scene_prim, declared_paths):
+    """Hold existing scene pickables at their authored pose until grasp begins.
+
+    Later episode-injected bodies are absent here and retain their own setup.
+    The shared normalizer rejects uneditable instance-proxy rigid descendants.
+    """
+    from tarsphere.infra.manipulation.pickable_physics import configure_dynamic_pickable
+
+    root = str(scene_prim.GetPath()).rstrip("/")
+    stage = scene_prim.GetStage()
+    for path in dict.fromkeys(str(value).rstrip("/") for value in declared_paths):
+        if not path.startswith(root + "/"):
+            continue
+        prim = stage.GetPrimAtPath(path)
+        if not prim or not prim.IsValid():
+            continue
+        if prim.IsInstanceProxy():
+            raise RuntimeError(f"Declared pickable root is an instance proxy: {path}")
+        configure_dynamic_pickable(prim, kinematic=True)

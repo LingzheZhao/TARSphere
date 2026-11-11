@@ -1,0 +1,25 @@
+[package]
+title = "TARSphere G1 camera compatibility on Isaac Sim 6.2"
+version = "0.1.0"
+[dependencies]
+"isaaclab.python.headless.rendering" = {}
+"isaacsim.core.api" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.robot.schema" = {}
+"isaacsim.sensors.camera" = {}
+# Register codeless schemas and stage-update clients before World creates the
+# stage. Enabling this stack from reset is too late for USD schema discovery.
+"omni.anim.navigation.schema" = {}
+"omni.anim.navigation.core" = {}
+"omni.anim.behavior.core" = {}
+
+[settings]
+# The supplied Lab camera experience excludes the deprecated Warp extension.
+# Its real classic-API dependencies require it; retain the other exclusions.
+app.extensions.excluded = ["omni.kit.pip_archive", "omni.isaac.ml_archive", "isaacsim.pip.newton"]
+
+# TARSphere explicitly captures through Replicator rather than Lab frame polling.
+exts."omni.replicator.core".Orchestrator.enabled = true
+
+# The author runs the classic backend without Fabric and reads camera USD poses.
+physics.updateToUsd = true

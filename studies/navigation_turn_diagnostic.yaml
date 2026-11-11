@@ -1,0 +1,6 @@
+episode: episodes/case/navigate_and_report/task_update.yaml
+settle_seconds: 2
+turn_degrees: [-60, 60]
+locations:
+  corridor_candidate_unverified: [-1.1, 0.0, 1.378]
+  terra_clutter: [3.1821, 1.5508, 1.378]

@@ -239,6 +239,49 @@ class GraspCertificationEvidence(StrictModel):
         return self
 
 
+class GraspPoseAttachmentEvidence(StrictModel):
+    """Measured closure and palm geometry authorizing the current attachment.
+
+    Finger contacts are diagnostic; this record makes no PhysX-contact claim.
+    """
+    hand: Literal["right"]
+    target_object_id: str = Field(min_length=1)
+    finger_joint_positions: Tuple[float, ...] = Field(min_length=7, max_length=7)
+    finger_closure_l2_rad: float = Field(ge=0)
+    minimum_finger_closure_l2_rad: float = Field(ge=0)
+    grasp_center_to_object_m: float = Field(ge=0)
+    aabb_surface_gap_m: float = Field(ge=0)
+    finger_contacts: Tuple[PhysXGraspContactEvidence, ...]
+
+
+class GraspPoseCertificationEvidence(StrictModel):
+    """Current producer's palm-pose attachment and measured carry displacement.
+
+    This is separate from historical PhysX-contact certification evidence.
+    """
+    target_object_id: str = Field(min_length=1)
+    grasp_pose_established: bool
+    attachment_evidence: Optional[GraspPoseAttachmentEvidence] = None
+    minimum_aabb_surface_gap_m: Optional[float] = Field(default=None, ge=0)
+    carried_away: bool
+    maximum_attached_displacement_m: Optional[float] = Field(default=None, ge=0)
+    required_displacement_m: float = Field(gt=0)
+    carried_state: Optional[Mapping[str, Any]] = None
+    passed: bool
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> "GraspPoseCertificationEvidence":
+        pose = self.attachment_evidence is not None
+        if pose and self.attachment_evidence.target_object_id != self.target_object_id:
+            raise ValueError("attachment target differs from trial target")
+        carried = (self.maximum_attached_displacement_m is not None
+                   and self.maximum_attached_displacement_m >= self.required_displacement_m)
+        if (self.grasp_pose_established != pose or self.carried_away != carried
+                or self.passed != (pose and carried)):
+            raise ValueError("grasp pose certificate disagrees with measured evidence")
+        return self
+
+
 class PhysicalTrialFailure(StrictModel):
     """Fail-loud exception materialized by the Scene Server."""
 
@@ -331,8 +374,8 @@ class PhysicalTrialRolloutResult(StrictModel):
             "Live hand–target geometry measured during bounded Stage-A arm reaches."
         ),
     )
-    grasp_certification_evidence: GraspCertificationEvidence = Field(
-        description=("Native contact and carry-away evidence for Stage A."),
+    grasp_certification_evidence: GraspCertificationEvidence | GraspPoseCertificationEvidence = Field(
+        description=("Producer-specific attachment and carry-away evidence for Stage A."),
     )
     placement_release_evidence: Optional[PlacementReleaseEvidence] = Field(
         default=None,
@@ -445,21 +488,9 @@ def run_grasp_system_trial(
     max_steps: Optional[int] = None,
 ) -> PhysicalTrialRolloutResult:
     """Run the known-positive reference through the normal grasp stack."""
-    world = episode.world_knowledge
-    if (
-        not isinstance(world, dict)
-        or "grasp_system_trial" not in world
-        or any(
-            key in world
-            for key in (
-                "physical_trial",
-                "physical_task",
-                "episode_route",
-            )
-        )
-    ):
-        raise ValueError("run_grasp_system_trial requires one grasp-system episode")
-    trial = GraspSystemTrial.model_validate(world["grasp_system_trial"])
+    from tarsphere.bench.certification.grasp_system_episode import validate_grasp_system_world
+
+    trial = validate_grasp_system_world(episode.world_knowledge)
     result = _run_certification_episode(
         scene_server,
         episode,

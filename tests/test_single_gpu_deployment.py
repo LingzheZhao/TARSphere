@@ -356,3 +356,36 @@ def test_resuming_cannot_relabel_saved_model_or_completion_budget():
             ValueError, match="selected_model_bindings.*new --output-dir"
         ):
             validate_plan_reuse(saved, changed)
+
+
+def test_worker_logs_original_failure_before_fast_shutdown(monkeypatch, capsys):
+    """Kit cleanup may exit before Python prints an unhandled exception."""
+    import ast
+    import traceback
+    from types import SimpleNamespace
+
+    module = ast.parse((ROOT / 'tarsphere/cli/worker.py').read_text())
+    function = next(n for n in module.body if isinstance(n, ast.FunctionDef)
+                    and n.name == 'run_evaluation_schedule')
+    guarded = next(n for n in ast.walk(function) if isinstance(n, ast.Try)
+                   and any(isinstance(s, ast.Expr) and isinstance(s.value, ast.Call)
+                           and isinstance(s.value.func, ast.Attribute)
+                           and isinstance(s.value.func.value, ast.Name)
+                           and s.value.func.value.id == 'env'
+                           and s.value.func.attr == 'close' for s in n.finalbody))
+    monkeypatch.setenv('TEST_WORKER_KEY', 'local-test')
+    def fail(**kwargs):
+        raise RuntimeError('agent constructor failed')
+    def fast_shutdown():
+        assert 'RuntimeError: agent constructor failed' in capsys.readouterr().err
+        raise SystemExit(0)
+    namespace = dict(os=os, sys=sys, traceback=traceback,
+                     env=SimpleNamespace(close=fast_shutdown),
+                     loaded_runs=[({'api_key_env': 'TEST_WORKER_KEY',
+                                    'name': 'agent', 'model': 'test',
+                                    'api_base': 'http://127.0.0.1/v1'}, [object()])],
+                     _build_worker_agent=fail, DEFAULT_AGENT_MAX_TOKENS=2048,
+                     agent_harness_config=None)
+    code = compile(ast.Module(body=[guarded], type_ignores=[]), '<worker-cleanup>', 'exec')
+    with pytest.raises(SystemExit):
+        exec(code, namespace)

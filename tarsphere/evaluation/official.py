@@ -54,10 +54,14 @@ def validate_formal_trajectory_budget(trajectory: EpisodeTrajectory) -> None:
 def validate_formal_episode_runtime(episode: Any) -> None:
     """Reject episode-authored limits that would change the formal protocol."""
 
-    if episode.runtime.max_decision_steps is not None:
+    if episode.runtime.max_decision_steps not in (
+        None,
+        FORMAL_EVALUATION_MAX_DECISION_STEPS,
+    ):
         raise ValueError(
             f"Formal episode {episode.episode_id!r} must leave "
-            "runtime.max_decision_steps null; formal evaluation applies the "
+            "runtime.max_decision_steps null or equal to the formal limit; "
+            "formal evaluation applies the "
             f"fixed {FORMAL_EVALUATION_MAX_DECISION_STEPS}-decision limit."
         )
     if episode.runtime.max_physics_steps is not None:

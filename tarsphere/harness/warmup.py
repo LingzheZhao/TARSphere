@@ -89,7 +89,28 @@ def warmup_configured_heavy_backends(
     return summary
 
 
+def warmup_episode_manipulation_planner(
+    environment: Any, episode: Any, receipt_path: Any, *, agent_harness_config: Any = None,
+) -> bool:
+    """Validate declared manipulation using private, currently live robot state.
+
+    Official episodes share tools, so a public grasp tool alone is insufficient:
+    the episode must also bind an actual pickable. Call with an initialized live
+    world before policy execution; the receipt is implementation evidence only.
+    """
+    from tarsphere.infra.episode.episode_runner import resolve_agent_action_space
+    from tarsphere.infra.manipulation.g1_attachment import manipulation_objects_from_episode
+
+    if "grasp_object" not in resolve_agent_action_space(episode, agent_harness_config):
+        return False
+    if not any(item.pickable for item in manipulation_objects_from_episode(episode)):
+        return False
+    environment.warmup_manipulation_planner(receipt_path)
+    return True
+
+
 __all__ = [
+    "warmup_episode_manipulation_planner",
     "env_flag",
     "heavy_backend_warmup_requested",
     "warmup_configured_heavy_backends",

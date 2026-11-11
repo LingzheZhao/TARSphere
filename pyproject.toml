@@ -49,6 +49,7 @@ exclude = ["tests*", "third_party*", "scripts*"]
 namespaces = false
 
 [tool.setuptools.package-data]
+"tarsphere.infra.perception" = ["assets/*.png"]
 "tarsphere.simulator" = ["LICENSE"]
 "tarsphere.bench.inputs" = ["sources.json"]
 "tarsphere.humans" = ["runtime_capabilities.json"]

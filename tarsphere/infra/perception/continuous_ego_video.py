@@ -86,7 +86,11 @@ class _RawRgbVideoWriter:
                 "-pix_fmt",
                 "yuv420p",
                 "-movflags",
-                "+faststart",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-g",
+                str(max(1, round(float(fps)))),
+                "-flush_packets",
+                "1",
                 str(self.output_path),
             ],
             stdin=subprocess.PIPE,
@@ -122,8 +126,9 @@ class _RawRgbVideoWriter:
         self._closed = True
         assert self._process.stdin is not None
         self._process.stdin.close()
-        # Concurrent native captures can take longer to drain and relocate the
-        # MP4 index; allow finalization to finish before rejecting the artifact.
+        # One-second independently indexed fragments preserve completed video
+        # if an external deadline kills the worker before this close runs.
+        # Normal closure still drains the encoder and checks its exit status.
         return_code = self._process.wait(timeout=300.0)
         self._log.close()
         if return_code != 0 or not self.output_path.is_file():

@@ -40,6 +40,40 @@ def _array(value: Any) -> np.ndarray:
     return result
 
 
+def _kinematic_character_snapshot(stage: Any, path: str, *, scene_bound: bool) -> dict[str, Any]:
+    """Read actual USD root and bound skeletal pose without an AnimGraph."""
+    from pxr import Usd, UsdGeom, UsdSkel
+
+    root = stage.GetPrimAtPath(path)
+    if not root:
+        raise RuntimeError(f"Kinematic Human root is missing: {path}")
+    state = {
+        "pose_source": "scene_bound_static_person" if scene_bound else "kinematic_usd_skeleton",
+        "world_transform": _array(
+            UsdGeom.Xformable(root).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        ).tolist(),
+    }
+    if scene_bound:
+        return state
+    cache = UsdSkel.Cache()
+    for prim in Usd.PrimRange(root):
+        if prim.IsA(UsdSkel.Root):
+            cache.Populate(UsdSkel.Root(prim), Usd.PrimDefaultPredicate)
+    skeletons = {}
+    for prim in Usd.PrimRange(root):
+        if prim.IsA(UsdSkel.Skeleton):
+            query = cache.GetSkelQuery(UsdSkel.Skeleton(prim))
+            transforms = query.ComputeJointLocalTransforms(Usd.TimeCode.Default())
+            skeletons[str(prim.GetPath())] = {
+                "joints": list(map(str, query.GetJointOrder())),
+                "joint_local_transforms": _array(transforms).tolist(),
+            }
+    if not skeletons:
+        raise RuntimeError(f"Kinematic Human has no readable USD skeleton: {path}")
+    state["skeletons"] = skeletons
+    return state
+
+
 def _same_state(before: Any, after: Any) -> bool:
     if isinstance(before, dict):
         return (
@@ -281,6 +315,14 @@ class _NativeCapture:
         for human in self.env.episode.humans:
             human_id = str(human.id)
             body = self.env._human_body
+            if self.env.human_motion_backend == "kinematic":
+                characters = body._characters
+                path = characters._paths[human_id]
+                actor_roots[f"human:{human_id}"] = path
+                humans[human_id] = _kinematic_character_snapshot(
+                    self.stage, path, scene_bound=characters.is_scene_bound(human_id)
+                )
+                continue
             path = body._character_prim_paths[human_id]
             actor_roots[f"human:{human_id}"] = path
             if human_id in body._scene_bound_ids:

@@ -5,7 +5,7 @@ def clear_stage_by_prim_path(prim_path: str = None) -> None:
         prim_path (str, optional): path of the stage. Defaults to None.
     """
     # Note: Need to import this here to prevent circular dependencies.
-    from omni.isaac.core.utils.prims import (
+    from isaacsim.core.utils.prims import (
         get_all_matching_child_prims,
         get_prim_path,
         get_prim_type_name,

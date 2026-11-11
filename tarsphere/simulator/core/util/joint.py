@@ -32,9 +32,9 @@ def create_joint(
     Returns:
         Usd.Prim: Created joint prim
     """
-    import omni
+    from isaacsim.core.utils.prims import get_prim_at_path, is_prim_path_valid
     import pxr
-    from omni.isaac.core import World
+    from isaacsim.core.api import World
 
     world = World()
     stage = world.stage
@@ -43,18 +43,18 @@ def create_joint(
 
     # Possibly add body0, body1 targets
     if body0 is not None:
-        assert omni.isaac.core.utils.prims.is_prim_path_valid(body0), (
+        assert is_prim_path_valid(body0), (
             f"Invalid body0 path specified: {body0}"
         )
         joint.GetBody0Rel().SetTargets([pxr.Sdf.Path(body0)])
     if body1 is not None:
-        assert omni.isaac.core.utils.prims.is_prim_path_valid(body1), (
+        assert is_prim_path_valid(body1), (
             f"Invalid body1 path specified: {body1}"
         )
         joint.GetBody1Rel().SetTargets([pxr.Sdf.Path(body1)])
 
     # Get the prim pointed to at this path
-    joint_prim = omni.isaac.core.utils.prims.get_prim_at_path(prim_path)
+    joint_prim = get_prim_at_path(prim_path)
 
     # Apply joint API interface
     pxr.PhysxSchema.PhysxJointAPI.Apply(joint_prim)

@@ -124,7 +124,7 @@ class PhysicalScenePreparer:
     def applied(self) -> bool:
         return self._stage is not None
 
-    def apply(self, stage: Any) -> dict[str, Any]:
+    def apply(self, stage: Any, *, physics_world: Any) -> dict[str, Any]:
         """Hide unstable prims and align pickables to flat support surfaces."""
         if self.applied:
             raise PhysicalScenePreparationError(
@@ -221,7 +221,7 @@ class PhysicalScenePreparer:
                     "aligned_bounds_max_xyz": list(aligned_upper),
                     "alignment_error_m": alignment_error,
                 }
-                reset_rigid_body_to_authored_pose(stage, item.runtime_prim)
+                reset_rigid_body_to_authored_pose(stage, item.runtime_prim, world=physics_world)
         except Exception:
             self.restore()
             raise

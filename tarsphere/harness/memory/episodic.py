@@ -169,6 +169,7 @@ class EpisodicMemory:
         self.text = TextMemory(actor_id=actor_id)
         self.human = HumanMemory(actor_id=actor_id)
         self.key = KeyMemoryLedger()
+        self._submitted_inspections: list[dict[str, Any]] = []
         # The protocol value counts history only. VisualMemory retains the
         # current observation as the final record in addition to that history.
         self.visual = VisualMemory(
@@ -235,6 +236,7 @@ class EpisodicMemory:
             body_posture=self._body_posture(pose),
             known_objects=(list(self.grounding.entries.values())),
             key_memories=(self.key.records),
+            submitted_inspections=[dict(item) for item in self._submitted_inspections],
             grasped_hands=self.text.grasped_hands,
             humans=self.human.retrieved_humans(),
             semantic_entities=(self.semantic.summaries),
@@ -251,6 +253,13 @@ class EpisodicMemory:
         accepted_event_output_batches: list[dict[str, Any]],
         plan_updates_accepted: bool,
     ) -> None:
+        for batch in accepted_event_output_batches:
+            if "inspection" in batch:
+                self._submitted_inspections.append({
+                    "text": batch["inspection"],
+                    "action_step": int(self.text.current_record.action_step),
+                    "policy_step": int(policy_step),
+                })
         plan_update = None
         if plan_updates_accepted:
             for batch in accepted_event_output_batches:
@@ -495,6 +504,7 @@ class EpisodicMemory:
         self.text.reset()
         self.human.reset()
         self.key.reset()
+        self._submitted_inspections.clear()
         self.visual.reset()
         self.grounding.clear()
         self._current_view_groundings.clear()

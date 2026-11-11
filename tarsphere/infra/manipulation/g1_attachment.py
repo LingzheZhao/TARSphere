@@ -294,6 +294,7 @@ class G1AttachmentExecutor:
         *,
         robot_root_path: str,
         object_local_unit_in_meters: float,
+        physics_world: Any,
         on_world_authored: Callable[[], None] | None = None,
     ) -> None:
         if not objects:
@@ -307,6 +308,7 @@ class G1AttachmentExecutor:
             raise ValueError(
                 "object_local_unit_in_meters must be a finite positive number."
             )
+        self.physics_world = physics_world
         self.objects = list(objects)
         self.robot_root_path = str(robot_root_path).rstrip("/")
         self.object_local_unit_in_meters = float(object_local_unit_in_meters)
@@ -353,7 +355,7 @@ class G1AttachmentExecutor:
                     item,
                     enabled=True,
                 )
-                reset_rigid_body_to_authored_pose(stage, item.prim_path)
+                reset_rigid_body_to_authored_pose(stage, item.prim_path, world=self.physics_world)
         self.stage = stage
         self.initial_local_transforms = {
             item.object_id: read_object_local_transform(stage, item.prim_path)
@@ -562,7 +564,7 @@ class G1AttachmentExecutor:
             self.grasp_contact_monitor = None
         if self.stage is not None:
             from tarsphere.simulator.core.util.physics import activate_collider
-            from omni.isaac.core.utils.prims import get_prim_at_path
+            from isaacsim.core.utils.prims import get_prim_at_path
 
             self.release_manipulation_stance()
             for item in self.objects:
@@ -609,7 +611,7 @@ class G1AttachmentExecutor:
             _zero_pickable_velocity(stage, item)
             _restore_pickable_local_transform(stage, item, local_transform)
             _zero_pickable_velocity(stage, item)
-            reset_rigid_body_to_authored_pose(stage, item.prim_path)
+            reset_rigid_body_to_authored_pose(stage, item.prim_path, world=self.physics_world)
             restored.append(
                 {
                     "object_id": item.object_id,
@@ -1615,7 +1617,7 @@ def _restore_pickable_local_transform(
     """Restore authored local xform operations and remove carried momentum."""
     from pxr import Gf, UsdPhysics
     from tarsphere.simulator.core.util.physics import activate_collider
-    from omni.isaac.core.utils.prims import get_prim_at_path
+    from isaacsim.core.utils.prims import get_prim_at_path
 
     prim = _require_prim(stage, item.prim_path, label=item.object_id)
     activate_collider(get_prim_at_path(item.prim_path))
@@ -1827,7 +1829,7 @@ def _subtract_vectors(first: list[float], second: list[float]) -> list[float]:
 def _activate_pickable_collider(item: G1ManipulationObject) -> None:
     """Activate a pickable collider without leaking Isaac imports to tests."""
     from tarsphere.simulator.core.util.physics import activate_collider
-    from omni.isaac.core.utils.prims import get_prim_at_path
+    from isaacsim.core.utils.prims import get_prim_at_path
 
     activate_collider(get_prim_at_path(item.prim_path))
 

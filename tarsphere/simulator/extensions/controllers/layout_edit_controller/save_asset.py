@@ -12,7 +12,7 @@ class SaveAsset:
         filename: str = "saved_scene.usd",
     ):
         import omni
-        from omni.isaac.core import SimulationContext
+        from isaacsim.core.api import SimulationContext
 
         try:
             sim = SimulationContext.instance()

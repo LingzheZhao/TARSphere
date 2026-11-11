@@ -1,0 +1,7 @@
+cases:
+  - image: desk.jpg
+    positive: [desk, cabinet]
+    negative: [bottle]
+  - image: bedroom.png
+    positive: [bed, bookshelf]
+    negative: [bottle]

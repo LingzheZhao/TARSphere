@@ -118,13 +118,9 @@ def load_episode_occupancy(
     path = path.resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Compiled episode occupancy is missing: {path}")
-    scene = getattr(episode, "scene", None)
-    scene_asset = str(getattr(scene, "asset_path", "") or "")
-    if scene_asset.endswith("/start_result_navigation.usd"):
-        assets = assets_root or tarsphere_assets_root()
-        validate_scene_occupancy_provenance(
-            path, root=assets.parent, scene_usd=assets / scene_asset
-        )
+    # SceneMap.occupancy is the official NPY array, as in grounding and
+    # ordinary navigation. A scene USD basename does not declare a custom
+    # baked-map provenance protocol or imply that a JSON sidecar exists.
     return OfficialOccupancyBevMap(occupancy_path=path)
 
 

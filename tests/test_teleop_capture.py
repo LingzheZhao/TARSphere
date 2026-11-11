@@ -318,6 +318,7 @@ def test_snapshot_reads_live_dofs_and_native_human_joints_not_cached_spawn_poses
         articulation=SimpleNamespace(get_joint_positions=lambda: [live["robot_joint"]]),
     )
     runtime.env = SimpleNamespace(
+        human_motion_backend="animation",
         _live_robots=lambda: [robot],
         _robot_root_prim_path=lambda: "/Robot",
         _human_body=SimpleNamespace(

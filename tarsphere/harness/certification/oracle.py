@@ -3030,20 +3030,9 @@ class GoldenOracleAgent:
                 grasp_motion_trial,
             )
         if grasp_system_trial is not None:
-            if any(
-                world.get(key) is not None
-                for key in (
-                    "grasp_motion_trial",
-                    "physical_trial",
-                    "physical_task",
-                    "episode_route",
-                )
-            ):
-                raise ValueError(
-                    "Grasp-system trials cannot declare another task or route"
-                )
-            if not isinstance(grasp_system_trial, dict):
-                raise ValueError("world_knowledge.grasp_system_trial must be a mapping")
+            from tarsphere.bench.certification.grasp_system_episode import validate_grasp_system_world
+
+            validate_grasp_system_world(world)
             reference = grasp_system_trial.get("reference_object")
             if not isinstance(reference, dict):
                 raise ValueError("Grasp-system trial requires its reference object")
@@ -3600,6 +3589,9 @@ class GoldenOracleAgent:
             grasp,
             target_id=target_id,
             target=objects_by_id[target_id],
+            # Calibrate the evaluated RGB-D / GraspGenX / cuRobo skill,
+            # including its current-capture target binding and retention gates.
+            public_skill=True,
         )
         phases.append({"kind": "report"})
         return phases

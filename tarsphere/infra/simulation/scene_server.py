@@ -36,6 +36,7 @@ from tarsphere.harness.harness import (
 from tarsphere.harness.warmup import (
     heavy_backend_warmup_requested,
     warmup_configured_heavy_backends,
+    warmup_episode_manipulation_planner,
 )
 from tarsphere.api_usage import aggregate_model_calls, merge_usage_reports
 from tarsphere.configs.secrets import EvaluationSupportServiceError
@@ -1228,6 +1229,7 @@ class SceneServer:
         t0 = time.monotonic()
         rollout_infrastructure_error: BaseException | None = None
         try:
+            self._warmup_manipulation_planner(episode, attempt_slug)
             result = runner.run(max_decision_steps=max_steps)
         except EvaluationSupportServiceError as exc:
             rollout_infrastructure_error = exc
@@ -2001,6 +2003,13 @@ class SceneServer:
             assert_upright(action_name=reason, env_action=zero)
         print(
             f"[SERVER] G1 standing hold ({reason}, steps={settle_steps}).", flush=True
+        )
+
+    def _warmup_manipulation_planner(self, episode: Any, attempt_slug: str) -> None:
+        """Validate real manipulation dependencies before spending policy calls."""
+        warmup_episode_manipulation_planner(
+            self.env, episode, self.output_dir / f"{attempt_slug}.planner_warmup.json",
+            agent_harness_config=self.agent_harness_config,
         )
 
     def _warmup_agent_if_requested(self) -> None:

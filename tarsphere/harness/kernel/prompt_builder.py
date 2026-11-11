@@ -341,7 +341,9 @@ def envelope_schema_section(
         "or submit a new complete `plan` to cancel the first check and replace "
         "the plan.\n"
         "- `inspection`: your final inspection conclusion string, submitted "
-        "once when the requested inspection is complete.\n"
+        "once when the requested inspection is complete, before leaving to report. "
+        "For inspection tasks this field is required at that point; omit it "
+        "for non-inspection tasks or while still investigating.\n"
     )
     output_contract += (
         '- `memory`: list of `{"op": "remember|revise|forget", '
@@ -545,10 +547,14 @@ def envelope_schema_section(
     parts.extend(
         (
             "",
-            "### Optional inspection conclusion",
-            'For an inspection task, add `inspection: "<your observed findings>"` '
-            "once for that inspection. State the requested facts you observed and "
-            "anything that remains unclear. Omit it while still investigating. "
+            "### Inspection conclusion when complete",
+            'For an inspection task, completing the inspection requires a top-level '
+            '`inspection: "<your observed findings>"` field, submitted once '
+            'before leaving the inspection to return or report. Statements in '
+            '`thinking`, `memory`, `subgoal` or a speech action do not submit '
+            'this field. State only the requested facts you observed and '
+            "anything that remains unclear. Omit it while still investigating and "
+            "for non-inspection or exploration tasks. "
             "The first eligible submission is final; later submissions do not "
             "replace it. This records your inspection conclusion, not a report "
             "delivered to a Human.",
@@ -597,8 +603,9 @@ def envelope_schema_section(
         (
             "",
             "### Final JSON output",
-            "Return exactly one valid json (JSON) object in this shape, adding the optional "
-            "inspection conclusion when submitting it, with no Markdown or text outside it:",
+            "Return exactly one valid json (JSON) object in this shape, adding a "
+            "top-level `inspection` string when completing a requested inspection "
+            "before leaving to report. Omit it otherwise. No Markdown or text outside it:",
             json.dumps(final_output, ensure_ascii=False, separators=(",", ":")),
         )
     )

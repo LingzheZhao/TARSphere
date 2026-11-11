@@ -1,0 +1,16 @@
+# Offline identity controls; no navigation or task-success claim.
+episode: episodes/case/navigate_and_report/base.yaml
+target_object_id: bottle/model_fdda7f8e37cde39156b218f568160b87_0
+poses:
+- label: base_author_pitch_30
+  xy_yaw:
+  - 1.037
+  - -3.579
+  - -1.9144553293380968
+  camera_gaze_tilt_deg: -30
+- label: base_author_pitch_15
+  xy_yaw:
+  - 1.037
+  - -3.579
+  - -1.9144553293380968
+  camera_gaze_tilt_deg: -15
