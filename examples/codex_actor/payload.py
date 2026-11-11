@@ -1,16 +1,19 @@
 """Lossless actor payload mapping for Codex app-server v2.
 
-Only the harness's system + one user shape is accepted. No implicit history,
+Accept an optional system message followed by exactly one user. No implicit history,
 role flattening, sampling controls, or JSON instructions are added.
 """
+
+
 def map_actor_payload(payload):
     messages = payload['messages']
-    if len(messages) != 2 or [m['role'] for m in messages] != ['system', 'user']:
-        raise ValueError('Expected exactly system + one user; history belongs to harness')
-    system = messages[0]['content']
+    roles = [m['role'] for m in messages]
+    if roles not in (['system', 'user'], ['user']):
+        raise ValueError('Expected optional system + exactly one user; history belongs to harness')
+    system = messages[0]['content'] if roles[0] == 'system' else ''
     if not isinstance(system, str):
         raise ValueError('System content must be text')
-    content = messages[1]['content']
+    content = messages[-1]['content']
     if isinstance(content, str):
         content = [{'type': 'text', 'text': content}]
     items = []

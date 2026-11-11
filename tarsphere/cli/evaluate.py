@@ -1301,6 +1301,16 @@ def release_ready_jobs(jobs: list[EvaluationJob]) -> None:
             job.state = "queued"
 
 
+def enforce_worker_launch_limit(jobs: list[EvaluationJob], limit: int | None) -> None:
+    if limit is None:
+        return
+    for job in jobs:
+        if job.state in {"queued", "cooldown"} and job.launch_sequence >= limit:
+            job.state = "failed"
+            reason = f"worker launch limit exhausted ({limit})"
+            job.last_error = f"{job.last_error}; {reason}" if job.last_error else reason
+
+
 def job_record(job: EvaluationJob, output: Path) -> dict[str, Any]:
     total = sum(len(scene.models) * len(scene.episodes) for scene in job.scene_runs)
     physical_pending = pending_episode_count(output, job)
@@ -1334,6 +1344,12 @@ def build_parser() -> argparse.ArgumentParser:
     from tarsphere.harness.harness_cli import add_agent_harness_arguments
 
     add_agent_harness_arguments(parser)
+    parser.add_argument(
+        "--max-worker-launches",
+        type=int,
+        default=None,
+        help="Positive per-job worker launch limit (default: unlimited).",
+    )
     parser.add_argument(
         "--episodes",
         type=Path,
@@ -1441,6 +1457,8 @@ def main(args: argparse.Namespace | None = None) -> None:
     from tarsphere.harness.harness_cli import agent_harness_config_from_args
 
     harness_config = agent_harness_config_from_args(args)
+    if args.max_worker_launches is not None and args.max_worker_launches < 1:
+        raise ValueError("--max-worker-launches must be positive")
     if args.max_tokens < 1:
         raise ValueError("--max-tokens must be positive")
     if args.max_starting_workers < 1:
@@ -1773,6 +1791,7 @@ def main(args: argparse.Namespace | None = None) -> None:
     try:
         while running or any(job.state in retryable_states for job in jobs):
             release_ready_jobs(jobs)
+            enforce_worker_launch_limit(jobs, args.max_worker_launches)
             for slot_name, worker in list(running.items()):
                 refresh_worker_activity(worker, output)
                 if (
@@ -1877,6 +1896,7 @@ def main(args: argparse.Namespace | None = None) -> None:
                 del running[slot_name]
 
             release_ready_jobs(jobs)
+            enforce_worker_launch_limit(jobs, args.max_worker_launches)
             starting_count = sum(
                 not worker_is_primed(worker) for worker in running.values()
             )

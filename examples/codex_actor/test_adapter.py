@@ -8,6 +8,12 @@ from rpc import RPC, ProtocolError
 from server import command, infer
 
 class AdapterTests(unittest.TestCase):
+    def test_user_only_readiness_request_has_empty_system(self):
+        system, items = map_actor_payload({'messages': [
+            {'role': 'user', 'content': 'Reply with exactly READY.'}]})
+        self.assertEqual(system, '')
+        self.assertEqual(items, [{'type': 'text', 'text': 'Reply with exactly READY.'}])
+
     def test_actor_order_and_exact_system(self):
         content = [{'type': 'text', 'text': 'before'},
                    {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,AA==', 'detail': 'high'}},

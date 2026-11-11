@@ -1,7 +1,9 @@
 # Codex actor transport
 
 This optional loopback adapter maps the harness's exact system message to Codex
-`baseInstructions` and its one user message to ordered text/image inputs. The
+`baseInstructions` and its one user message to ordered text/image inputs.
+The evaluator readiness check may omit the system message; that maps to empty
+base instructions with the original user request unchanged. The
 harness owns history; each decision starts a fresh ephemeral thread and child
 app-server. Only inline image observations are accepted. The final assistant
 message is returned without extracting or rewriting its decision envelope.
