@@ -115,7 +115,10 @@ def main():
                         body._behavior_tasks[human_id].agent,
                         tag_mapping.get('value', {}),
                         meters_per_unit=body._behavior_tasks[human_id].meters_per_unit)))
+                from studies.proxy_physics_measurement import measure_proxy_physics
                 proxy_path = env._human_collision_proxy_paths.get(human_id)
+                row['collision_proxy_physx'] = measure_proxy_physics(
+                    env._env.runner._world, proxy_path, body._behavior_tasks[human_id].meters_per_unit)
                 row['collision_proxy'] = measured(lambda: dict(path=proxy_path,
                     world_transform=np.array(UsdGeom.Xformable(stage.GetPrimAtPath(proxy_path)).ComputeLocalToWorldTransform(Usd.TimeCode.Default())).tolist()))
                 obs = env.observe()
