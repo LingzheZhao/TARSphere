@@ -1076,8 +1076,17 @@ def schedule_document(
 def worker_environment(
     slot: WorkerSlot, port: int, cache_root: Path, cpu_threads: int
 ) -> dict[str, str]:
+    from tarsphere.infra.simulation.demo_gpu import resolve_demo_gpu_mapping
+
     environment = dict(os.environ)
-    environment.pop("CUDA_VISIBLE_DEVICES", None)
+    demo_mapping = resolve_demo_gpu_mapping(environment)
+    if demo_mapping is not None and slot.gpu != demo_mapping["physical_gpu"]:
+        raise RuntimeError(
+            f"Worker physical GPU {slot.gpu} differs from the verified demo "
+            f"GPU {demo_mapping['physical_gpu']}."
+        )
+    if demo_mapping is None:
+        environment.pop("CUDA_VISIBLE_DEVICES", None)
     environment.update(
         {
             "PYTHONPATH": f"{ROOT}:{environment.get('PYTHONPATH', '')}",
@@ -1100,6 +1109,16 @@ def worker_environment(
             "OMNI_USER_CACHE": str(cache_root / "ov" / slot.name),
         }
     )
+    if demo_mapping is not None:
+        # Kit and resource locks use the physical index; CUDA consumers see
+        # the single verified UUID as local device zero.
+        environment.update(
+            {
+                "TARSPHERE_WORKER_CUDA_VISIBLE_DEVICES": demo_mapping["uuid"],
+                "TARSPHERE_MODEL_GPU": "0",
+                "TARSPHERE_FRONTIERNET_DEVICE": "cuda:0",
+            }
+        )
     return environment
 
 
