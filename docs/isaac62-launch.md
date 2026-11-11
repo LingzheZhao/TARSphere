@@ -75,6 +75,16 @@ isolated worker's `initialize` operation constructs the hand planner and runs
 its dependency warmup. Successful initialization establishes dependency
 construction and warmup only; it does not plan or execute a physical grasp.
 
+Set `TARSPHERE_CUROBO_PYTHON` to a separately provisioned planner interpreter
+when its dependencies differ from the simulator's. The client preserves the
+virtual-environment entry point and removes the simulator's Python search-path
+overrides from the worker. An explicit `python_executable` client argument takes
+precedence over the environment variable. Verify imports and planner warmup in
+that exact worker environment; a successful import in the parent is insufficient.
+The scene server initializes this planner with private live joint state before
+model decisions when the episode declares a pickable and admits `grasp_object`.
+The recorded state remains a startup diagnostic; execution reads the joints again.
+
 Before starting the interpreter, set the standard `TMPDIR` variable to a fresh
 writable attempt directory outside the checkout. Worker request files retained
 there after a failure can then be inspected and replayed using the same declared

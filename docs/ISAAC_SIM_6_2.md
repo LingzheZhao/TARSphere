@@ -142,6 +142,12 @@ that reading, so task completion does not establish measured skeletal fidelity
 or full animation coverage. Task feedback, rendered observations and skeleton
 measurements have distinct evidential limits.
 
+A five-second diagnostic at `5ff637c` subsequently recorded live Fabric skeleton
+transforms at all 20 samples. Foot displacement and thigh rotation relative to
+the pelvis verify articulated motion, without using static USD transforms as a
+fallback. This does not verify collision-proxy skin coverage, gait fidelity or
+the unexecuted GoTo final-heading composition.
+
 Compatibility paths use the public Kit application loop and PhysX backend
 `resolve_indices` interface. These interface fixes do not establish physical
 manipulation success.
