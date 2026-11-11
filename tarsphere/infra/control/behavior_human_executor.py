@@ -64,7 +64,7 @@ class BehaviorHumanTasks:
             heading = math.radians(float(end_heading_deg))
             if not math.isfinite(heading):
                 raise ValueError('GoTo heading must be finite')
-            kwargs['facing'] = (math.cos(heading), math.sin(heading), 0.0)
+            raise NotImplementedError('Installed Isaac 110.4 move_to has no facing parameter')
         self.cancel()
         return self._replace(self.agent.move_to(**kwargs), 'goto')
 
@@ -312,6 +312,8 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         if command not in {'goto', 'idle', 'listen', *self.SPEECH_COMMANDS}:
             return self._failed(human_id, command,
                 f'Isaac behavior animation action {command!r} is not yet verified in the loaded motion library')
+        if command == 'goto' and action.get('end_rot') not in (None, '_'):
+            return self._failed(human_id, command, 'Installed Isaac 110.4 move_to has no facing parameter')
         return super().apply_action(human_id, action)
 
     def _inject_command(self, human_id, command):

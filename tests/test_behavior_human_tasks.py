@@ -177,15 +177,15 @@ def test_measured_joint_tags_refreshes_and_serializes(monkeypatch):
     assert json.loads(json.dumps(receipt))['value'] == {'Pelvis': 'actual-tag'}
 
 
-def test_final_heading_forwarded_to_same_native_move_task():
-    class FacingAgent(Agent):
-        def move_to(self, *, target, facing=(0, 0, 0), auto_brake=True):
-            return super().move_to(target=target, facing=facing, auto_brake=auto_brake)
-    agent = FacingAgent()
+def test_installed_1104_signature_and_unsupported_heading_preserves_walk():
+    class InstalledAgent(Agent):
+        def move_to(self, target, auto_brake=True):
+            return super().move_to(target=target, auto_brake=auto_brake)
+    agent = InstalledAgent()
     tasks = BehaviorHumanTasks(agent, API, meters_per_unit=.01)
-    task = tasks.goto([1, 2, 0], end_heading_deg=90)
-    assert agent.calls == [('move_to', {'target': (100, 200, 0),
-        'facing': pytest.approx((0, 1, 0)), 'auto_brake': True})]
+    task = tasks.goto([1, 2, 0])
+    calls = list(agent.calls)
+    with pytest.raises(NotImplementedError, match='no facing parameter'):
+        tasks.goto([2, 2, 0], end_heading_deg=90)
     assert tasks.task_id == task
-    assert tasks.status() == 'running'
-    assert agent.calls[-1][0] == 'move_to'  # No second idle task or synthetic completion.
+    assert agent.calls == calls
