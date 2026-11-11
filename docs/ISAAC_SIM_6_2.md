@@ -131,13 +131,15 @@ original `F_Medical_01` character, explicitly loads its USD payload, and binds
 its skeleton through the SDK control-rig mapping and behavior agent. It drives
 SDK tasks rather than writing walking root transforms or synthesizing joints.
 GoTo, Idle, Listen and speech are implemented; other actions fail explicitly.
-GoTo with a final heading is explicitly unsupported on this backend. Standalone
-idle-facing has been exercised in simulation, but Idle is an ongoing task and no
-terminal facing contract has been confirmed. The proposed composition was removed
-because waiting for an unconfirmed Idle success state could leave GoTo incomplete;
-the observed three-second turn alone does not prove Idle never terminates. The
-author default kinematic behavior is unchanged. Sitting and the full author
-animation action set are not validated on this backend.
+GoTo final heading now forwards the author degree angle as the native move-to
+`facing` direction, preserving the same SDK task ID and terminal status. The
+[official Behavior API](https://docs.omniverse.nvidia.com/kit/docs/behavior-simulation/110.1.1/behavior-simulation/api.html)
+documents arrival facing; installed behavior.core is 110.4.0. Physical validation
+of this direct binding remains pending. No Idle composition or synthetic heading
+completion threshold is used. Standalone idle-facing has been exercised; its
+ongoing status does not establish a terminal facing contract. The author default
+kinematic behavior is unchanged. Sitting and the full author animation action
+set are not validated on this backend.
 
 The 19-second out-and-return protocol followed by a standalone 90-degree
 idle-facing request completed on revision `20d02e6`. This did not exercise the

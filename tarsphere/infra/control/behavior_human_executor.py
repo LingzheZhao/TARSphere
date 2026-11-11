@@ -64,7 +64,7 @@ class BehaviorHumanTasks:
             heading = math.radians(float(end_heading_deg))
             if not math.isfinite(heading):
                 raise ValueError('GoTo heading must be finite')
-            raise NotImplementedError('GoTo final-heading completion requires a verified native lifecycle')
+            kwargs['facing'] = (math.cos(heading), math.sin(heading), 0.0)
         self.cancel()
         return self._replace(self.agent.move_to(**kwargs), 'goto')
 
@@ -312,8 +312,6 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         if command not in {'goto', 'idle', 'listen', *self.SPEECH_COMMANDS}:
             return self._failed(human_id, command,
                 f'Isaac behavior animation action {command!r} is not yet verified in the loaded motion library')
-        if command == 'goto' and action.get('end_rot') not in (None, '_'):
-            return self._failed(human_id, command, 'GoTo final-heading completion requires a verified native lifecycle')
         return super().apply_action(human_id, action)
 
     def _inject_command(self, human_id, command):

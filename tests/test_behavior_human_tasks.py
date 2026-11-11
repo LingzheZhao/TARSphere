@@ -177,12 +177,15 @@ def test_measured_joint_tags_refreshes_and_serializes(monkeypatch):
     assert json.loads(json.dumps(receipt))['value'] == {'Pelvis': 'actual-tag'}
 
 
-def test_unverified_final_heading_rejects_without_preempting_current_walk():
-    agent = Agent()
+def test_final_heading_forwarded_to_same_native_move_task():
+    class FacingAgent(Agent):
+        def move_to(self, *, target, facing=(0, 0, 0), auto_brake=True):
+            return super().move_to(target=target, facing=facing, auto_brake=auto_brake)
+    agent = FacingAgent()
     tasks = BehaviorHumanTasks(agent, API, meters_per_unit=.01)
-    moving = tasks.goto([1, 2, 0])
-    calls = list(agent.calls)
-    with pytest.raises(NotImplementedError, match='verified native lifecycle'):
-        tasks.goto([2, 2, 0], end_heading_deg=90)
-    assert tasks.task_id == moving
-    assert agent.calls == calls
+    task = tasks.goto([1, 2, 0], end_heading_deg=90)
+    assert agent.calls == [('move_to', {'target': (100, 200, 0),
+        'facing': pytest.approx((0, 1, 0)), 'auto_brake': True})]
+    assert tasks.task_id == task
+    assert tasks.status() == 'running'
+    assert agent.calls[-1][0] == 'move_to'  # No second idle task or synthetic completion.
