@@ -2,6 +2,8 @@
 
 Starts the original SceneServer in-process in golden-oracle mode by default.
 Use --http only with an independently provided compatible HTTP transport.
+In-process execution requires --grounded-scene prepared by the original
+resolve_scene API in a separate CPU process; this avoids importing USD before Kit.
 The provisioning job must enforce a finite wall-clock budget in-process. Frozen target geometry is used only by the certification policy.
 A single pass is a diagnostic, not the author's consecutive-pass certificate.
 """
@@ -14,7 +16,7 @@ import os
 from pathlib import Path
 import traceback
 
-from tarsphere.bench.grounding.resolve import resolve_scene
+from tarsphere.bench.grounding.schema import GroundedScene
 from tarsphere.bench.certification.scene_client import SceneServerClient
 from tarsphere.bench.certification.grasp_system import resolve_grasp_system_trial
 from tarsphere.bench.certification.grasp_system_episode import compile_grasp_system_episode
@@ -59,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--assets-root', required=True)
     parser.add_argument('--scene-id', required=True)
+    parser.add_argument('--grounded-scene', type=Path, help='Validated GroundedScene JSON from CPU preparation; required in-process')
     parser.add_argument('--http', action='store_true', help='Use external HTTP transport instead of owning Isaac')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=positive_int, default=8765)
@@ -68,6 +71,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--output-root', type=Path, required=True)
     args = parser.parse_args(argv)
     args.assets_root = str(Path(args.assets_root).expanduser().resolve())
+    if not args.http and args.grounded_scene is None:
+        parser.error('--grounded-scene is required for in-process execution')
+    if args.grounded_scene is not None:
+        args.grounded_scene = args.grounded_scene.expanduser().resolve()
     if not args.request_id.strip():
         parser.error('--request-id must not be blank')
     args.output_root.mkdir(parents=True, exist_ok=False)
@@ -76,7 +83,15 @@ def main(argv: list[str] | None = None) -> int:
          for key, value in vars(args).items()}, indent=2))
     server = None
     try:
-        scene = resolve_scene(args.scene_id, assets_root=args.assets_root)
+        if args.grounded_scene is not None:
+            scene = GroundedScene.model_validate_json(args.grounded_scene.read_text())
+            if scene.scene_id != args.scene_id:
+                raise ValueError('Grounded scene identity differs from --scene-id')
+            (args.output_root / 'grounded_scene.json').write_text(scene.model_dump_json(indent=2))
+        else:
+            # Only the client-only CPU process may resolve USD metadata here.
+            from tarsphere.bench.grounding.resolve import resolve_scene
+            scene = resolve_scene(args.scene_id, assets_root=args.assets_root)
         if args.http:
             client = SceneServerClient(host=args.host, port=args.port, timeout_s=args.timeout_s)
             identity = client.identity()
