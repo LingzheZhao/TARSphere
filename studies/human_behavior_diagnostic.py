@@ -102,7 +102,11 @@ def main():
                 before = env._physics_steps
                 state = body.get_state(human_id)
                 tag_mapping = body.measured_joint_tags(human_id)
-                row = dict(phase=phase['name'], admission=admission,
+                from studies.fabric_joint_measurement import read_fabric_joints
+                fabric_joints = measured(lambda: read_fabric_joints(stage,
+                    str(body._behavior_skeletons[human_id].GetPrim().GetPath()),
+                    body._behavior_tasks[human_id].meters_per_unit))
+                row = dict(fabric_joints=fabric_joints, phase=phase['name'], admission=admission,
                     physics_step=before, state=asdict(state),
                     behavior_pose=measured(lambda: body._poll_character_runtime_pose(human_id)),
                     skeleton=measured(skeleton),

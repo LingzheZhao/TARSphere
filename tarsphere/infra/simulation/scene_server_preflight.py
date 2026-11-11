@@ -51,7 +51,12 @@ def preload_support_surface_geometry() -> dict[str, str]:
     """
     try:
         import shapely
+        from importlib.metadata import version
+        from packaging.version import Version
         from shapely import constrained_delaunay_triangles
+        import numpy as np
+        import manifold3d as mf
+        import trimesh
         from shapely.geometry import Polygon
         import shapely.ops  # Resolve the support-surface module's imports now.
         import shapely.geometry.polygon
@@ -59,9 +64,32 @@ def preload_support_surface_geometry() -> dict[str, str]:
         triangles = constrained_delaunay_triangles(Polygon([(0, 0), (1, 0), (0, 1)]))
         if len(triangles.geoms) != 1:
             raise RuntimeError("Shapely constrained triangulation returned an invalid probe")
+        if Version(shapely.__version__) < Version("2.1.2"):
+            raise RuntimeError("Shapely>=2.1.2 is required")
+        if version("manifold3d") != "3.5.2" or Version(trimesh.__version__) < Version("4.0"):
+            raise RuntimeError("manifold3d==3.5.2 and trimesh>=4.0 are required")
+        # Same Mesh64/Boolean/export path used by the real support envelope.
+        vertices = np.array([[0, 0, 1], [1, 0, 1], [0, 1, 1],
+                             [0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float64)
+        faces = np.array([(0, 1, 2), (5, 4, 3), (0, 3, 4), (0, 4, 1),
+                          (1, 4, 5), (1, 5, 2), (2, 5, 3), (2, 3, 0)], dtype=np.uint64)
+        prisms = [mf.Manifold(mf.Mesh64(vertices + shift, faces))
+                  for shift in (0.0, np.array([0.25, 0.0, 0.0]))]
+        if any(prism.status() != mf.Error.NoError for prism in prisms):
+            raise RuntimeError("Manifold support-prism probe is invalid")
+        solid = mf.Manifold.batch_boolean(prisms, mf.OpType.Add).as_original().simplify(1e-7)
+        mesh = solid.to_mesh64()
+        surface_mesh = trimesh.Trimesh(vertices=np.asarray(mesh.vert_properties)[:, :3],
+                                 faces=np.asarray(mesh.tri_verts), process=False)
+        if solid.status() != mf.Error.NoError or not surface_mesh.is_watertight or surface_mesh.volume <= 0:
+            raise RuntimeError("Support Boolean/Trimesh probe returned invalid geometry")
     except Exception as exc:
         raise RuntimeError(
             "Support-surface geometry requires the project Shapely>=2.1.2 "
-            "with constrained Delaunay support before Isaac starts"
+            "with constrained Delaunay support, manifold3d==3.5.2 and trimesh>=4.0 "
+            "before Isaac starts"
         ) from exc
-    return {"version": str(shapely.__version__), "path": str(shapely.__file__)}
+    return {"version": str(shapely.__version__), "path": str(shapely.__file__),
+            "manifold3d_version": version("manifold3d"), "manifold3d_path": str(mf.__file__),
+            "trimesh_version": str(trimesh.__version__), "trimesh_path": str(trimesh.__file__),
+            "numpy_version": str(np.__version__), "numpy_path": str(np.__file__)}
