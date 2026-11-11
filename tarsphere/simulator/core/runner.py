@@ -446,6 +446,12 @@ class SimulatorRunner:
         )
 
     def setup_isaacsim(self):
+        from tarsphere.infra.simulation.scene_server_preflight import (
+            preload_support_surface_geometry,
+        )
+
+        geometry_dependency = preload_support_surface_geometry()
+        print(f"[GEOMETRY] Shapely preloaded before Isaac: {geometry_dependency}", flush=True)
         # SimulationApp must be created before importing most Isaac modules.
         from isaacsim import SimulationApp  # noqa
 
@@ -498,6 +504,9 @@ class SimulatorRunner:
         self._simulation_app._carb_settings.set(
             "/physics/cooking/ujitsoCollisionCooking", False
         )
+        if preload_support_surface_geometry() != geometry_dependency:
+            raise RuntimeError("Kit changed the preloaded support-surface geometry dependency")
+        print("[GEOMETRY] Shapely triangulation verified after Kit startup", flush=True)
         log.debug("SimulationApp init done")
 
         # Isaac 4.2 and 4.5 expose streaming configuration through different APIs.

@@ -27,6 +27,23 @@ def test_compiler_binding_passes_reader_and_oracle_without_fake_execution(monkey
     trial = validate_grasp_system_world(episode.world_knowledge)
     phases = GoldenOracleAgent._build_phases(episode)
     assert phases and phases[-1]["kind"] == "report"
+    assert [phase["kind"] for phase in phases] == [
+        "precise_approach", "orient", "grasp_reach", "report",
+    ]
+    reach = phases[-2]
+    assert reach["public_skill"] is True
+    assert reach["certification_gate"] == "A"
+    assert reach["target"] == trial.reference_object.object_id
+    assert reach["target_phrase"]
+    # Completion advances through the original Stage A gate to report.
+    agent = GoldenOracleAgent.__new__(GoldenOracleAgent)
+    agent.phases = phases
+    agent.phase_index = len(phases) - 2
+    agent._completed_certification_gates = set()
+    reach["_awaiting_result"] = True
+    agent.update_info({"executed": True})
+    assert agent.phase_index == len(phases) - 1
+    assert agent._completed_certification_gates == {"A"}
     class ReachedExecution(Exception): pass
     def execution(*args, **kwargs):
         assert kwargs["stage"] == "A"

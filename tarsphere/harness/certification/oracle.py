@@ -3589,6 +3589,9 @@ class GoldenOracleAgent:
             grasp,
             target_id=target_id,
             target=objects_by_id[target_id],
+            # Calibrate the evaluated RGB-D / GraspGenX / cuRobo skill,
+            # including its current-capture target binding and retention gates.
+            public_skill=True,
         )
         phases.append({"kind": "report"})
         return phases

@@ -41,3 +41,27 @@ def preload_open_frontier_clustering_dependencies() -> dict[str, str]:
         "scipy": str(getattr(scipy, "__file__", "")),
         "sklearn": str(getattr(sklearn, "__file__", "")),
     }
+
+
+def preload_support_surface_geometry() -> dict[str, str]:
+    """Resolve project Shapely before Kit prepends its older vendored copy.
+
+    Exercise the GEOS operation used by support-surface triangulation, not just
+    the import. This CPU-only dependency must never be replaced after Kit starts.
+    """
+    try:
+        import shapely
+        from shapely import constrained_delaunay_triangles
+        from shapely.geometry import Polygon
+        import shapely.ops  # Resolve the support-surface module's imports now.
+        import shapely.geometry.polygon
+
+        triangles = constrained_delaunay_triangles(Polygon([(0, 0), (1, 0), (0, 1)]))
+        if len(triangles.geoms) != 1:
+            raise RuntimeError("Shapely constrained triangulation returned an invalid probe")
+    except Exception as exc:
+        raise RuntimeError(
+            "Support-surface geometry requires the project Shapely>=2.1.2 "
+            "with constrained Delaunay support before Isaac starts"
+        ) from exc
+    return {"version": str(shapely.__version__), "path": str(shapely.__file__)}
