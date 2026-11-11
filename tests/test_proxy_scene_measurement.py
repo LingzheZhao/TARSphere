@@ -1,11 +1,9 @@
 from types import SimpleNamespace
-from dataclasses import dataclass
+from tarsphere.infra.simulation.scene_query import SurfaceRayHit
 from studies.proxy_scene_measurement import measure_proxy_rays
 
-
-@dataclass
-class Hit:
-    prim_path: str
+def Hit(path):
+    return SurfaceRayHit(prim_path=path, position_xyz=(0,0,0), normal_xyz=(1,0,0))
 
 
 def test_scene_query_retains_occluders_and_exact_proxy_at_both_locations():
@@ -19,4 +17,4 @@ def test_scene_query_retains_occluders_and_exact_proxy_at_both_locations():
     rays = receipt['value']['rays']
     assert len(rays) == 12
     assert rays[0]['origin'][0] - rays[6]['origin'][0] == 2
-    assert all(len(ray['hits']) == 2 and ray['exact_proxy_hits'] == [{'prim_path': '/World/Proxy'}] for ray in rays)
+    assert all(len(ray['hits']) == 2 and [hit['prim_path'] for hit in ray['exact_proxy_hits']] == ['/World/Proxy'] for ray in rays)

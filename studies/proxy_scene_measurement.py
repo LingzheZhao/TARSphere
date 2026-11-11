@@ -1,5 +1,4 @@
 """Independent read-only PhysX scene-query receipts for the exact proxy shape."""
-from dataclasses import asdict
 
 
 def measure_proxy_rays(query, path, current_center, initial_center, radius, height):
@@ -20,8 +19,8 @@ def measure_proxy_rays(query, path, current_center, initial_center, radius, heig
                     direction[axis] = 1.
                     hits = live_query.all_hits(tuple(origin), tuple(direction), 4 * radius)
                     rays.append(dict(location=label, origin=origin, direction=direction,
-                        distance=4 * radius, hits=[asdict(hit) for hit in hits],
-                        exact_proxy_hits=[asdict(hit) for hit in hits if hit.prim_path == path]))
+                        distance=4 * radius, hits=[hit.model_dump(mode='json') for hit in hits],
+                        exact_proxy_hits=[hit.model_dump(mode='json') for hit in hits if hit.prim_path == path]))
         return dict(path=path, expected_radius=radius, expected_height=height,
                     current_center=list(current_center), initial_center=list(initial_center), rays=rays)
     return measured(read)
