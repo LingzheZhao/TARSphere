@@ -3611,6 +3611,13 @@ def _require_curobo_v2() -> None:
         supported = Version(version).release == (0, 8, 0)
     except InvalidVersion:
         supported = False
+    # The frozen bundled v0.8.0 source has no distribution metadata. Its
+    # official version helper returns this exact sentinel in that case.
+    # Only accept it from this checkout's audited source, never another install.
+    if not supported and version == "v0.8.0-no-tag":
+        bundled = Path(__file__).resolve().parents[3] / "third_party/curobo/curobo/__init__.py"
+        module_path = getattr(curobo, "__file__", None)
+        supported = module_path is not None and Path(module_path).resolve() == bundled.resolve()
     if not supported:
         raise RuntimeError(
             f"TARSphere requires cuRobo {CUROBO_V2_VERSION}; "
