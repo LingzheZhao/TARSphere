@@ -2142,7 +2142,8 @@ class G1GraspPlannerClient:
         # Preserve the venv entry point: resolving its Python symlink selects
         # the base interpreter and loses that environment's installed Torch.
         self.python_executable = (
-            Path(python_executable or sys.executable).expanduser().absolute()
+            Path(python_executable or os.environ.get("TARSPHERE_CUROBO_PYTHON") or sys.executable)
+            .expanduser().absolute()
         )
         repository_root = Path(__file__).resolve().parents[3]
         # Small process entry point; it never imports Isaac or its Warp build.
