@@ -96,6 +96,8 @@ def main():
                 action = {'command':phase['command']}
                 if 'target' in phase:
                     action['target'] = phase['target']
+                if 'end_rot' in phase:
+                    action['end_rot'] = phase['end_rot']
                 admission = asdict(env.apply_human_action(human_id, action))
             remaining = int(round(float(phase['seconds']) / dt))
             while remaining > 0:
@@ -119,6 +121,15 @@ def main():
                 proxy_path = env._human_collision_proxy_paths.get(human_id)
                 row['collision_proxy_physx'] = measure_proxy_physics(
                     env._env.runner._world, proxy_path, body._behavior_tasks[human_id].meters_per_unit)
+                from studies.proxy_scene_measurement import measure_proxy_rays
+                from tarsphere.infra.simulation.scene_query import PhysXSurfaceRaycast
+                from tarsphere.infra.simulation.isaac_env import HUMAN_COLLISION_RADIUS_METERS, HUMAN_COLLISION_HEIGHT_METERS
+                center = [*state.position[:2], state.position[2] + HUMAN_COLLISION_HEIGHT_METERS / 2]
+                if not rows:
+                    initial_proxy_center = list(center)
+                row['collision_proxy_scene_queries'] = measure_proxy_rays(
+                    PhysXSurfaceRaycast, proxy_path, center, initial_proxy_center,
+                    HUMAN_COLLISION_RADIUS_METERS, HUMAN_COLLISION_HEIGHT_METERS)
                 row['collision_proxy'] = measured(lambda: dict(path=proxy_path,
                     world_transform=np.array(UsdGeom.Xformable(stage.GetPrimAtPath(proxy_path)).ComputeLocalToWorldTransform(Usd.TimeCode.Default())).tolist()))
                 obs = env.observe()
