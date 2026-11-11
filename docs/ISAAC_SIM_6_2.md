@@ -124,7 +124,7 @@ publicly exposes 360 authored definitions across 30 scenes. Retrieve them into
 a fresh directory outside the checkout:
 
 ```sh
-python studies/fetch_published_episodes.py /absolute/external/new-benchmark-root
+python -m studies.fetch_published_episodes /absolute/external/new-benchmark-root
 scripts/evaluate.sh --plan --episodes /absolute/external/new-benchmark-root/index.json
 ```
 
