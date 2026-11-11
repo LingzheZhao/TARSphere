@@ -14,7 +14,7 @@ GitHub and agent instruction files are omitted. No other upstream source or
 resource file differs or is missing in that comparison.
 
 The fixed TARSphere revision identifies this bundled source plus its Warp
-adaptations. Native extensions are built on the target machine. Without Git
+adaptations. CUDA extensions are built on the target machine. Without Git
 metadata or an installed `nvidia_curobo` distribution, the unchanged official
 version helper reports `v0.8.0-no-tag`; TARSphere accepts that sentinel only
 when the loaded package is this checkout's bundled package. External installs
