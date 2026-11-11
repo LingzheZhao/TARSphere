@@ -146,3 +146,27 @@ Repository cases have different identities and definitions: earlier example
 runs cannot be relabeled as published benchmark runs. Schema validation does
 not establish scene, character, metadata or model resource availability, or
 physical execution success. Run the episode-specific asset preflight separately.
+
+## Published navigation-and-report result
+
+Revision `806e3e7` completed the published
+`corner_lounge_home_navigate_and_report_base` task on Isaac Sim 6.2 with
+`gpt-6.1-sol` through Codex at medium effort and Qwen3-4B support: **5/5,
+success**, 26 decisions, 26 actions, no fall. The robot inspected the bed,
+retained its submitted finding, returned and delivered the correct report to
+Elena. The matched `gpt-6.1-terra` condition ended in a physical fall at **1/5**.
+Both used an RTX 3090, the same task/assets/controller, 100-decision cap and one
+physical worker. This is one paired episode, not a general model ranking.
+
+The successful condition includes an explicit public inspection-output reminder
+and durable retention of the agent's own admitted inspection statements. Those
+statements remain historical context, not new scoring events or evaluator truth.
+The NPC classifier also skips empty topic sets and validates other selections
+within its existing bounded retries. Sixty-two focused CPU checks cover these
+contracts. Earlier unmodified-prompt failures remain separate evidence.
+
+All final videos decode completely, including the failed trajectory. The
+successful run still recorded scene contacts; moving-person navigation,
+fetch-and-deliver and the complete benchmark are not validated by this result.
+This port also differs from the author's SDK and model-service conditions, so
+it does not reproduce the paper's benchmark scores. [Detailed evidence](https://github.com/LingzheZhao/humanoid-office/blob/codex/bootstrap/docs/results/interaction.md#paired-published-task-after-inspection-retention).
