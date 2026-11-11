@@ -130,7 +130,26 @@ Stage the SDK's `HumanMotionLibrary.usd` and set
 original `F_Medical_01` character, explicitly loads its USD payload, and binds
 its skeleton through the SDK control-rig mapping and behavior agent. It drives
 SDK tasks rather than writing walking root transforms or synthesizing joints.
-GoTo, Idle, Listen and speech are implemented; other actions fail explicitly.
+GoTo, Idle, Listen and speech are implemented. Original `TypeKeyboard` and
+`PushButton` clips have an opt-in SDK adapter; set
+`TARSPHERE_BEHAVIOR_CUSTOM_ACTIONS=1` before setup. This requires the original
+`Characters/biped_demo/biped_demo_meters.usd` source skeleton and sibling
+`Animations/type_keyboard.skelanim.usd` and `Animations/push_button.skelanim.usd`.
+The SDK's `ImportCustomActionCommand` retargets copies into a fresh private folder
+under `TARSPHERE_LOCAL_SCRATCH` (system temporary storage when unset). Setup
+restores the user's custom-action storage setting afterward, leaves the owner's
+timeline untouched, and verifies both names on each real agent. Source assets
+and the staged motion-library file remain unchanged. These optional resources
+are not required for GoTo or Idle.
+
+Custom requests retain the existing interaction-anchor admission and dispatch
+`agent.custom_action(name, duration=seconds)`. Completion comes from that task's
+SDK status, including failed or invalid tasks. Zero duration means indefinite
+execution in the SDK; negative or nonfinite durations are rejected. CPU contracts
+cover task identity, completion, import arguments and storage isolation. Physical
+execution and retargeted fidelity of these two actions remain unvalidated on the
+pinned 6.2 runtime; enabling the adapter is not evidence of either. Other actions
+fail explicitly.
 GoTo final heading is explicitly unsupported on the installed 110.4.0 backend.
 The [110.1.1 reference](https://docs.omniverse.nvidia.com/kit/docs/behavior-simulation/110.1.1/behavior-simulation/api.html)
 documents a `move_to(facing=...)` parameter, but the actual installed binding

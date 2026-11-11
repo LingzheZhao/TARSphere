@@ -189,3 +189,146 @@ def test_installed_1104_signature_and_unsupported_heading_preserves_walk():
         tasks.goto([2, 2, 0], end_heading_deg=90)
     assert tasks.task_id == task
     assert agent.calls == calls
+
+
+def test_original_custom_action_preserves_native_task_and_completion():
+    agent = Agent()
+    agent.get_custom_action_names = lambda: ['TypeKeyboard', 'PushButton']
+    def custom_action(name, *, duration):
+        agent.calls.append(('custom_action', name, duration))
+        agent.tasks[71] = 'running'
+        return 71
+    agent.custom_action = custom_action
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=.01)
+    previous = tasks.idle()
+    assert tasks.custom_action('TypeKeyboard', duration=2.5) == 71
+    assert agent.calls[-2:] == [('cancel', previous), ('custom_action', 'TypeKeyboard', 2.5)]
+    assert not tasks.succeeded()
+    agent.tasks[previous] = 'succeeded'
+    assert not tasks.succeeded()
+    agent.tasks[71] = 'succeeded'
+    assert tasks.succeeded()
+
+
+@pytest.mark.parametrize('duration', [-1, math.nan, math.inf])
+def test_invalid_custom_duration_preserves_current_task(duration):
+    agent = Agent()
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=1)
+    current = tasks.idle()
+    with pytest.raises(ValueError):
+        tasks.custom_action('TypeKeyboard', duration=duration)
+    assert tasks.task_id == current
+    assert agent.tasks[current] == 'running'
+
+
+def test_unregistered_custom_action_preserves_current_task():
+    agent = Agent()
+    agent.get_custom_action_names = lambda: []
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=1)
+    current = tasks.idle()
+    with pytest.raises(RuntimeError, match='not registered'):
+        tasks.custom_action('TypeKeyboard', duration=0)
+    assert tasks.task_id == current
+    assert agent.tasks[current] == 'running'
+
+
+def test_custom_executor_waits_for_real_sdk_success():
+    from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+    agent = Agent()
+    agent.tasks[7] = 'running'
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=1)
+    tasks.task_id = 7
+    body = object.__new__(BehaviorHumanExecutor)
+    body._scene_bound_ids = set()
+    body._behavior_tasks = {'Nora': tasks}
+    body._pending_command_ids = {'Nora': {'7'}}
+    state = SimpleNamespace(active_action='type_keyboard', action_status='ongoing')
+    body._poll_command_completion('Nora', state)
+    assert state.action_status == 'ongoing'
+    assert body._pending_command_ids
+    agent.tasks[7] = 'succeeded'
+    body._poll_command_completion('Nora', state)
+    assert state.action_status == 'succeed'
+    assert not body._pending_command_ids
+
+
+def test_author_clip_import_uses_sdk_kwargs_and_private_storage(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+    from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+    # Mock only the SDK boundary; command argument names match shipped 110.4 tests.
+    modules = {}
+    names = ['carb', 'carb.settings', 'omni', 'omni.usd', 'omni.kit',
+             'omni.kit.commands', 'omni.anim.behavior.core.scripts.user_storage', 'pxr']
+    for name in names:
+        modules[name] = ModuleType(name)
+        monkeypatch.setitem(sys.modules, name, modules[name])
+    modules['carb'].settings = modules['carb.settings']
+    modules['omni'].usd = modules['omni.usd']
+    modules['omni'].kit = modules['omni.kit']
+    modules['omni.kit'].commands = modules['omni.kit.commands']
+    key = '/persistent/exts/omni.anim.behavior.ui/userCustomActionFolder'
+    modules[names[-2]].SETTING_USER_CUSTOM_ACTION_FOLDER = key
+    values = {key: 'previous-user-storage'}
+    modules['carb.settings'].get_settings = lambda: SimpleNamespace(
+        get=values.get, set=lambda k,v: values.__setitem__(k,v))
+    modules['pxr'].Sdf = SimpleNamespace(Path=lambda p: p)
+    stage = SimpleNamespace(GetPrimAtPath=lambda p: True, Load=lambda p: None)
+    modules['omni.usd'].get_context = lambda: SimpleNamespace(get_stage=lambda: stage)
+    calls = []
+    def execute(command, **kwargs):
+        calls.append((command, kwargs, values[key]))
+        return True, None
+    modules['omni.kit.commands'].execute = execute
+    root = tmp_path / 'Characters'
+    skeleton = root / 'biped_demo' / 'biped_demo_meters.usd'
+    skeleton.parent.mkdir(parents=True)
+    skeleton.touch()
+    animations = tmp_path / 'Animations'
+    animations.mkdir()
+    for clip in ['type_keyboard', 'push_button']:
+        (animations / f'{clip}.skelanim.usd').touch()
+    monkeypatch.setenv('TARSPHERE_LOCAL_SCRATCH', str(tmp_path))
+    body = object.__new__(BehaviorHumanExecutor)
+    body._character_assets_path = str(root)
+    body._behavior_custom_storage = None
+    body._behavior_library_path = 'staged-library.usd'
+    body._import_author_custom_actions()
+    assert values[key] == 'previous-user-storage'
+    assert len(calls) == 2
+    for (command, args, storage), (name, clip) in zip(calls,
+            [('TypeKeyboard', 'type_keyboard'), ('PushButton', 'push_button')]):
+        assert command == 'ImportCustomActionCommand'
+        assert args == dict(motion_library_prim_path='/World/Characters/HumanMotionLibrary',
+            rig_name='Human', skeleton_asset=str(skeleton), action_name=name,
+            animation_asset_urls=[str(animations / f'{clip}.skelanim.usd')], action_type='Custom')
+        assert storage == body._behavior_custom_storage
+        assert storage.startswith(str(tmp_path / 'tarsphere-custom-actions-'))
+
+
+@pytest.mark.parametrize('terminal, expected', [('succeeded', 'succeed'), ('failed', 'fail')])
+def test_custom_body_step_elapsed_time_cannot_complete_running_sdk_task(terminal, expected):
+    from tarsphere.infra.control.behavior_human_executor import BehaviorHumanExecutor
+    agent = Agent()
+    agent.tasks[7] = 'running'
+    tasks = BehaviorHumanTasks(agent, API, meters_per_unit=1)
+    tasks.task_id = 7
+    body = object.__new__(BehaviorHumanExecutor)
+    body._scene_bound_ids = set()
+    body._behavior_tasks = {'Nora': tasks}
+    body._pending_command_ids = {'Nora': {'7'}}
+    state = SimpleNamespace(active_action='push_button', action_status='ongoing')
+    body._states = {'Nora': state}
+    body._poll_character_position = lambda *args: None
+    body._sync = lambda *args: None
+    # Step far beyond a requested two-second hold. Only the SDK owns completion.
+    for _ in range(3):
+        body.step(100.0)
+        assert state.action_status == 'ongoing'
+        assert body._pending_command_ids == {'Nora': {'7'}}
+    agent.tasks[7] = terminal
+    body.step(100.0)
+    assert state.action_status == expected
+    assert not body._pending_command_ids
+    if expected == 'fail':
+        assert 'failed' in state.last_error

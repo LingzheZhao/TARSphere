@@ -25,7 +25,7 @@ def uses_behavior_animation_sdk() -> bool:
 
 
 class BehaviorHumanTasks:
-    """Translate author GoTo/Idle semantics to an existing behavior agent.
+    """Translate author GoTo/Idle/custom-action semantics to an existing behavior agent.
 
     Agent creation, animation-library loading and clock advancement are owned
     by the environment. Completion is read from the actual task, including its
@@ -77,6 +77,15 @@ class BehaviorHumanTasks:
             kwargs['facing'] = (math.cos(heading), math.sin(heading), 0.0)
         self.cancel()
         return self._replace(self.agent.idle(**kwargs), 'idle')
+
+    def custom_action(self, name, *, duration):
+        duration = float(duration)
+        if not math.isfinite(duration) or duration < 0:
+            raise ValueError('Custom action duration must be finite and nonnegative')
+        if name not in self.agent.get_custom_action_names():
+            raise RuntimeError(f'Isaac behavior custom action is not registered: {name}')
+        self.cancel()
+        return self._replace(self.agent.custom_action(name, duration=duration), name)
 
     def status(self):
         if self.task_id is None:
@@ -165,7 +174,7 @@ from tarsphere.infra.control.human_body import HumanBodyState
 
 
 class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
-    """Isaac 6.x skeletal animation; currently GoTo, Idle, Listen and speech.
+    """Isaac 6.x skeletal animation; GoTo, Idle, Listen, speech and imported author custom clips.
 
     Other author commands fail explicitly until their behavior-library actions
     and physical semantics have been exercised. The legacy executor remains
@@ -177,6 +186,8 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         self._behavior_tasks = {}
         self._behavior_library_path = None
         self._behavior_skeletons = {}
+        self._behavior_custom_storage = None
+        self._behavior_custom_actions_enabled = False
 
     def author_character_animation_graph(self):
         # The 6.x motion library and BehaviorAgentAPI replace Biped_Setup.
@@ -186,6 +197,56 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         if not path.is_file():
             raise FileNotFoundError('TARSPHERE_BEHAVIOR_MOTION_LIBRARY must name the staged Isaac HumanMotionLibrary.usd')
         self._behavior_library_path = str(path.resolve())
+        self._behavior_custom_actions_enabled = os.environ.get('TARSPHERE_BEHAVIOR_CUSTOM_ACTIONS') == '1'
+        if self._behavior_custom_actions_enabled:
+            self._import_author_custom_actions()
+
+    def _import_author_custom_actions(self):
+        # SDK 110.4 ImportCustomActionCommand retargets copies into user storage;
+        # neither the original clips nor the staged library are modified.
+        import os
+        import tempfile
+        from pathlib import Path
+        import carb.settings
+        import omni.usd
+        import omni.kit.commands
+        from omni.anim.behavior.core.scripts.user_storage import SETTING_USER_CUSTOM_ACTION_FOLDER
+        from pxr import Sdf
+        root = Path(self._character_assets_path).expanduser()
+        skeleton = root / 'biped_demo' / 'biped_demo_meters.usd'
+        animations = root.parent / 'Animations'
+        clips = {name: animations / f'{clip}.skelanim.usd'
+                 for name, clip in [('TypeKeyboard', 'type_keyboard'), ('PushButton', 'push_button')]}
+        missing = [str(p) for p in [skeleton, *clips.values()] if not p.is_file()]
+        if missing:
+            raise FileNotFoundError('Original custom-action resources missing: ' + ', '.join(missing))
+        if self._behavior_custom_storage is None:
+            scratch = os.environ.get('TARSPHERE_LOCAL_SCRATCH')
+            self._behavior_custom_storage = tempfile.mkdtemp(prefix='tarsphere-custom-actions-', dir=scratch)
+        settings = carb.settings.get_settings()
+        previous = settings.get(SETTING_USER_CUSTOM_ACTION_FOLDER)
+        try:
+            settings.set(SETTING_USER_CUSTOM_ACTION_FOLDER, self._behavior_custom_storage)
+            stage = omni.usd.get_context().get_stage()
+            library_path = Sdf.Path('/World/Characters/HumanMotionLibrary')
+            library = stage.GetPrimAtPath(library_path)
+            if not library:
+                library = stage.DefinePrim(library_path)
+                if not library.GetPayloads().AddPayload(self._behavior_library_path):
+                    raise RuntimeError('Cannot compose the staged behavior motion library')
+            stage.Load(library_path)
+            for name, clip in clips.items():
+                ok, _ = omni.kit.commands.execute('ImportCustomActionCommand',
+                    motion_library_prim_path=library_path, rig_name='Human',
+                    skeleton_asset=str(skeleton), action_name=name,
+                    animation_asset_urls=[str(clip)], action_type='Custom')
+                # The command can log an error and return None despite successful
+                # dispatch. Registration is checked on each real agent below.
+                if not ok:
+                    raise RuntimeError(f'Isaac custom action import failed: {name}')
+        finally:
+            settings.set(SETTING_USER_CUSTOM_ACTION_FOLDER, previous or '')
+
 
     def despawn_all(self):
         import omni.usd
@@ -279,6 +340,9 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
                 self._pump_app_updates(count=1)
             if agent is None:
                 raise RuntimeError(f'Isaac behavior agent did not register {human_id} after 120 setup updates')
+            missing_actions = {'TypeKeyboard', 'PushButton'} - set(agent.get_custom_action_names())
+            if self._behavior_custom_actions_enabled and missing_actions:
+                raise RuntimeError(f'Isaac agent lacks imported original custom actions: {sorted(missing_actions)}')
             tasks = BehaviorHumanTasks(agent, bh, meters_per_unit=scale)
             self._behavior_tasks[human_id] = tasks
             # Episode initialization only: the SDK's test_agent_reset uses
@@ -309,9 +373,12 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
 
     def apply_action(self, human_id, action):
         command = str(action.get('command') or '')
-        if command not in {'goto', 'idle', 'listen', *self.SPEECH_COMMANDS}:
+        if command not in {'goto', 'idle', 'listen', *self.SPEECH_COMMANDS, *self.CUSTOM_ANIMATED_COMMANDS}:
             return self._failed(human_id, command,
                 f'Isaac behavior animation action {command!r} is not yet verified in the loaded motion library')
+        if command in self.CUSTOM_ANIMATED_COMMANDS and not self._behavior_custom_actions_enabled:
+            return self._failed(human_id, command,
+                'Original custom clips require TARSPHERE_BEHAVIOR_CUSTOM_ACTIONS=1 during setup')
         if command == 'goto' and action.get('end_rot') not in (None, '_'):
             return self._failed(human_id, command, 'Installed Isaac 110.4 move_to has no facing parameter')
         return super().apply_action(human_id, action)
@@ -324,6 +391,8 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
                 end_heading_deg=float(parts[5]) if len(parts) > 5 and parts[5] != '_' else None)
         elif len(parts) >= 2 and parts[1] == 'Idle':
             task = tasks.idle()
+        elif len(parts) == 3 and parts[1] in self.CUSTOM_ANIMATED_COMMANDS.values():
+            task = tasks.custom_action(parts[1], duration=float(parts[2]))
         else:
             raise RuntimeError(f'Unsupported Isaac behavior command: {command}')
         self._pending_command_ids[human_id] = {str(task)}
@@ -343,6 +412,8 @@ class BehaviorHumanExecutor(AnimPeopleBodyExecutor):
         tasks = self._behavior_tasks[human_id]
         if tasks.succeeded():
             self._pending_command_ids.pop(human_id, None)
+            if state.active_action in self.CUSTOM_ANIMATED_COMMANDS:
+                state.action_status = 'succeed'
         elif tasks.failed():
             self._pending_command_ids.pop(human_id, None)
             state.action_status = 'fail'
