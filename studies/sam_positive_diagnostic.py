@@ -34,7 +34,8 @@ def run(input_dir: Path, output_dir: Path, config: Path, client) -> dict:
         for case_index, case in enumerate(cases):
             rgb = load_rgb(input_dir / case["image"])
             Image.fromarray(rgb).save(output_dir / f"image-{case_index}.png")
-            for expected, prompts in (("positive", case["positive"]), ("negative", case["negative"])):
+            for expected in ("positive", "negative", "probe"):
+                prompts = case.get(expected, [])
                 for prompt in prompts:
                     index = len(summary["cases"])
                     result = client.request({"cmd": "sam3_process", "rgb": rgb,
@@ -65,7 +66,7 @@ def run(input_dir: Path, output_dir: Path, config: Path, client) -> dict:
                     summary["cases"].append(record)
                     save()
         positives = [r for r in summary["cases"] if r["expected"] == "positive"]
-        summary["all_positive_controls_structurally_pass"] = bool(positives) and all(r["structural_positive"] for r in positives)
+        summary["all_positive_controls_structurally_pass"] = all(r["structural_positive"] for r in positives) if positives else None
     except Exception as exc:
         summary["error"] = f"{type(exc).__name__}: {exc}"
         raise

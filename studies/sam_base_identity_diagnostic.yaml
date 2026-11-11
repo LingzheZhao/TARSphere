@@ -1,0 +1,4 @@
+# Candidate captions on an identity-confirmed task object; no expected detections.
+cases:
+  - image: base-identity.png
+    probe: [bottle, beige bottle, vase, tray]

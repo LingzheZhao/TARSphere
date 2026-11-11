@@ -11,11 +11,23 @@ import math
 from pathlib import Path
 
 
+def validate_camera_gaze(config):
+    from tarsphere.infra.control.physical_contracts import CAMERA_GAZE_TILT_LIMIT_DEG
+
+    for pose in config['poses']:
+        pitch = float(pose.get('camera_gaze_tilt_deg', 0.0))
+        if not math.isfinite(pitch) or abs(pitch) > CAMERA_GAZE_TILT_LIMIT_DEG:
+            raise ValueError(f"{pose['label']}: camera gaze {pitch} outside +/-{CAMERA_GAZE_TILT_LIMIT_DEG} degrees")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--config', type=Path, default=Path('studies/navigation_target_diagnostic.yaml'))
     args = parser.parse_args()
+    import yaml
+    config = yaml.safe_load(args.config.read_text())
+    validate_camera_gaze(config)
     args.output.mkdir(parents=True, exist_ok=False)
     from tarsphere.infra.simulation.gpu_bootstrap import configure_cuda_allocator
     configure_cuda_allocator()
@@ -26,8 +38,6 @@ def main():
     import numpy as np
     from PIL import Image
 
-    import yaml
-    config = yaml.safe_load(args.config.read_text())
     (args.output / 'resolved.yaml').write_text(yaml.safe_dump(config))
     episode = BenchmarkCaseLoader().load_file(config['episode'])
     target_record = next(item for item in episode.world_knowledge['objects']

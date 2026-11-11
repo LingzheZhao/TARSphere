@@ -115,3 +115,34 @@ PhysX post-step callbacks. In the observed 6.2 condition their readings differ;
 the World clock accumulates callback step sizes. Neither counter is treated as
 independent evidence of the robot scene's integration time. The diagnostic's
 time bounds and control sequence remain unchanged.
+
+## Published benchmark definitions
+
+The repository's twelve `episodes/case` files are schema examples, not the
+paper's complete suite. The [author benchmark explorer](https://xuyicheng-zju.github.io/TARSphere/benchmark.html)
+publicly exposes 360 authored definitions across 30 scenes. Retrieve them into
+a fresh directory outside the checkout:
+
+```sh
+python studies/fetch_published_episodes.py /absolute/external/new-benchmark-root
+scripts/evaluate.sh --plan --episodes /absolute/external/new-benchmark-root/index.json
+```
+
+The downloader captures the actual page, index and detail script, preserves each
+raw author JSON export and its source reference, writes each embedded definition
+as YAML, and validates it with the installed schema loader. It refuses existing
+output roots, uses at most eight HTTP workers and bounded request timeouts, and
+writes its acquisition time and URLs beside the outputs. A failed acquisition
+leaves its partial root visible; use a distinct fresh root for another attempt.
+The website is mutable; captured inputs establish what was retrieved, rather
+than a permanently pinned website revision. Downloads never belong in Git.
+
+The 2026-11-11 acquisition contained 360 unique episode IDs, 180 per task family
+and 60 per condition. All passed the original pinned author schema loader.
+The provisioned `MVUCSQAKTKJ5EAABAAAAABY8_usd` scene corresponds to the twelve
+`corner_lounge_home` episodes; the README scene
+`MV7J6NIKTKJZ2AABAAAAADY8_usd` corresponds to `sectional_sofa_home`.
+Repository cases have different identities and definitions: earlier example
+runs cannot be relabeled as published benchmark runs. Schema validation does
+not establish scene, character, metadata or model resource availability, or
+physical execution success. Run the episode-specific asset preflight separately.
