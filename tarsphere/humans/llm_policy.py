@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,7 +71,8 @@ class HumanDialoguePolicy:
         return self._client
 
     def _infer(
-        self, instruction: str, payload: dict[str, Any], schema: type[BaseModel]
+        self, instruction: str, payload: dict[str, Any], schema: type[BaseModel],
+        *, validate_result: Callable[[BaseModel], None] | None = None,
     ) -> BaseModel:
         from openai import (
             APIConnectionError,
@@ -101,7 +102,8 @@ class HumanDialoguePolicy:
             "raw_responses": [],
         }
         self._model_calls.append(record)
-        # Retry transport or malformed JSON only. Count every provider response.
+        # Retry transport, malformed JSON, or unauthorized semantic output.
+        # Count every provider response within the same three-attempt budget.
         for attempt in range(3):
             started = time.monotonic()
             record["request_attempts"] += 1
@@ -141,13 +143,16 @@ class HumanDialoguePolicy:
             )
             record["raw_responses"].append(response.choices[0].message.content or "")
             try:
-                return schema.model_validate_json(
+                result = schema.model_validate_json(
                     response.choices[0].message.content or ""
                 )
-            except ValidationError as exc:
+                if validate_result is not None:
+                    validate_result(result)
+                return result
+            except (ValidationError, ValueError) as exc:
                 if attempt == 2:
                     raise EvaluationSupportServiceError(
-                        "NPC evaluation-support model returned invalid JSON "
+                        "NPC evaluation-support model returned invalid output "
                         "after three attempts"
                     ) from exc
         raise AssertionError("NPC inference exhausted without a result")
@@ -162,6 +167,14 @@ class HumanDialoguePolicy:
         public_context: dict[str, Any],
     ) -> TopicSelection:
         """Select an authorized topic without generating public dialogue."""
+
+        if not topics:
+            return TopicSelection(intent_id=None)
+        authorized_intents = {topic["intent_id"] for topic in topics}
+
+        def validate_selection(result: BaseModel) -> None:
+            if result.intent_id is not None and result.intent_id not in authorized_intents:
+                raise ValueError("NPC classifier returned an unauthorized intent")
 
         result = self._infer(
             "Classify the question into one authorized semantic topic. The topic description "
@@ -189,11 +202,8 @@ class HumanDialoguePolicy:
                 "history": history[-3:],
             },
             TopicSelection,
+            validate_result=validate_selection,
         )
-        if result.intent_id is not None and result.intent_id not in {
-            topic["intent_id"] for topic in topics
-        }:
-            raise ValueError("NPC classifier returned an unauthorized intent")
         return result
 
     def answer(
