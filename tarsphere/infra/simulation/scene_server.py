@@ -1228,6 +1228,7 @@ class SceneServer:
         t0 = time.monotonic()
         rollout_infrastructure_error: BaseException | None = None
         try:
+            self._warmup_manipulation_planner(episode, attempt_slug)
             result = runner.run(max_decision_steps=max_steps)
         except EvaluationSupportServiceError as exc:
             rollout_infrastructure_error = exc
@@ -2001,6 +2002,18 @@ class SceneServer:
             assert_upright(action_name=reason, env_action=zero)
         print(
             f"[SERVER] G1 standing hold ({reason}, steps={settle_steps}).", flush=True
+        )
+
+    def _warmup_manipulation_planner(self, episode: Any, attempt_slug: str) -> None:
+        """Validate real manipulation dependencies before spending policy calls."""
+        from tarsphere.infra.manipulation.g1_attachment import manipulation_objects_from_episode
+
+        if "grasp_object" not in resolve_agent_action_space(episode, self.agent_harness_config):
+            return
+        if not any(item.pickable for item in manipulation_objects_from_episode(episode)):
+            return
+        self.env.warmup_manipulation_planner(
+            self.output_dir / f"{attempt_slug}.planner_warmup.json"
         )
 
     def _warmup_agent_if_requested(self) -> None:

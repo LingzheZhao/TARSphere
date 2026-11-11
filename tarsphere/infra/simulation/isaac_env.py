@@ -9443,6 +9443,33 @@ class IsaacAutonomousEnv:
         )
         return transform
 
+    def warmup_manipulation_planner(self, receipt_path: Path) -> None:
+        """Initialize the isolated planner with private live pre-rollout state.
+
+        This validates dependencies before policy decisions; it neither plans a
+        target trajectory nor substitutes for the execution-time state reading.
+        """
+        from tarsphere.infra.manipulation.g1_grasp import G1GraspPlannerClient
+
+        receipt: Dict[str, Any] = {"state_source": "live_pre_rollout_articulation"}
+        try:
+            joints = self._g1_curobo_joint_positions()
+            height = self._g1_body_height_command()
+            receipt["current_joint_positions"] = joints
+            receipt["current_body_height_command_m"] = height
+            receipt["planner"] = G1GraspPlannerClient().initialize(
+                current_joint_positions=joints,
+                current_body_height_command_m=height,
+            )
+            receipt["status"] = "initialized"
+        except Exception as exc:
+            receipt["status"] = "failed"
+            receipt["failure"] = {"type": type(exc).__name__, "message": str(exc)}
+            raise
+        finally:
+            with Path(receipt_path).open("x", encoding="utf-8") as stream:
+                json.dump(receipt, stream, indent=2)
+
     def _g1_curobo_joint_positions(self) -> Dict[str, float]:
         """Read the complete live joint state required by G1 cuRobo."""
 
