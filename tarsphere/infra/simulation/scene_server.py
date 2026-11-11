@@ -36,6 +36,7 @@ from tarsphere.harness.harness import (
 from tarsphere.harness.warmup import (
     heavy_backend_warmup_requested,
     warmup_configured_heavy_backends,
+    warmup_episode_manipulation_planner,
 )
 from tarsphere.api_usage import aggregate_model_calls, merge_usage_reports
 from tarsphere.configs.secrets import EvaluationSupportServiceError
@@ -2006,14 +2007,9 @@ class SceneServer:
 
     def _warmup_manipulation_planner(self, episode: Any, attempt_slug: str) -> None:
         """Validate real manipulation dependencies before spending policy calls."""
-        from tarsphere.infra.manipulation.g1_attachment import manipulation_objects_from_episode
-
-        if "grasp_object" not in resolve_agent_action_space(episode, self.agent_harness_config):
-            return
-        if not any(item.pickable for item in manipulation_objects_from_episode(episode)):
-            return
-        self.env.warmup_manipulation_planner(
-            self.output_dir / f"{attempt_slug}.planner_warmup.json"
+        warmup_episode_manipulation_planner(
+            self.env, episode, self.output_dir / f"{attempt_slug}.planner_warmup.json",
+            agent_harness_config=self.agent_harness_config,
         )
 
     def _warmup_agent_if_requested(self) -> None:

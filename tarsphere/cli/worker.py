@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import traceback
+import uuid
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
@@ -60,6 +61,7 @@ from tarsphere.harness.harness_cli import (
 from tarsphere.harness.warmup import (
     heavy_backend_warmup_requested,
     warmup_configured_heavy_backends,
+    warmup_episode_manipulation_planner,
 )
 from tarsphere.api_usage import aggregate_model_calls, merge_usage_reports
 from tarsphere.bench.case_loader import BenchmarkCaseLoader
@@ -612,6 +614,13 @@ def _run_group(
                     heartbeat_path=heartbeat_path,
                     model_output_path=model_output_path,
                     progress_watchdog=ProgressWatchdog(),
+                    agent_harness_config=agent_harness_config,
+                )
+                # Both primed first episodes and later soft resets are now
+                # bound to the live world. Fail dependencies before policy calls.
+                warmup_episode_manipulation_planner(
+                    env, episode,
+                    output_dir / f"{artifact_slug}.planner_warmup.{uuid.uuid4().hex}.json",
                     agent_harness_config=agent_harness_config,
                 )
                 result = runner.run(

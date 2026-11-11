@@ -49,3 +49,44 @@ def test_private_receipt_uses_actual_getters_and_retains_failure(tmp_path,monkey
     assert receipt['state_source']=='live_pre_rollout_articulation'
     assert receipt['status']==('failed' if fail else 'initialized')
 
+
+@pytest.mark.parametrize('primed',[False,True])
+@pytest.mark.parametrize('fail',[False,True])
+def test_real_cli_group_dispatch_after_live_reset_before_policy(tmp_path,monkeypatch,fail,primed):
+    import tarsphere.cli.worker as worker
+    episode=BenchmarkCaseLoader().load_file(ROOT/'episodes/case/fetch_and_deliver/base.yaml')
+    calls=[]
+    env=NS(load_episode=lambda e:calls.append('bind'),
+        reset=lambda **kw:calls.append('reset') or {'actual':'reset'},
+        configure_continuous_ego_video=lambda **kw:None,
+        _start_continuous_ego_video=lambda:None,
+        warmup_manipulation_planner=lambda path:initialize(path),
+        close=lambda:calls.append('close'))
+    def initialize(path):
+        calls.append(('initialize',path))
+        if fail:raise RuntimeError('planner dependency')
+    class Runner:
+        def __init__(self,**kw):pass
+        def run(self,**kw):
+            calls.append('policy')
+            return {'episode_id':episode.episode_id,'success':False}
+        def partial_result(self,**kw):
+            calls.append('partial')
+            return {'episode_id':episode.episode_id,'success':False}
+    monkeypatch.setattr(worker,'AutonomousEpisodeRunner',Runner)
+    monkeypatch.setattr('tarsphere.bench.execution_metrics.attach_execution_quality',lambda *a,**kw:None)
+    class Saved(Exception):pass
+    def persist(e,r,result,out):
+        assert ('policy' in calls) is not fail
+        if fail:assert result['outcome_status']=='infrastructure_invalid'
+        raise Saved
+    monkeypatch.setattr(worker,'_save_rollout_artifact',persist)
+    with pytest.raises(Saved):
+        worker._run_group([episode],agent=NS(),headless=True,image_dir='',viewer_mode='none',
+            max_steps=1,output_dir=tmp_path,prebuilt_env=env,
+            prebuilt_initial_observation={'actual':'already_reset'} if primed else None)
+    if not primed:assert calls[:2]==['bind','reset']
+    init=next(call for call in calls if isinstance(call,tuple))
+    assert init[0]=='initialize'
+    assert init[1].parent==tmp_path
+    assert calls[-1]=='close'
