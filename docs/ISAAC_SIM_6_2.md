@@ -131,9 +131,13 @@ original `F_Medical_01` character, explicitly loads its USD payload, and binds
 its skeleton through the SDK control-rig mapping and behavior agent. It drives
 SDK tasks rather than writing walking root transforms or synthesizing joints.
 GoTo, Idle, Listen and speech are implemented; other actions fail explicitly.
-GoTo final facing composes move-to and idle-facing SDK tasks into one completion
-lifecycle. That composition has CPU checks but has not been verified in simulation. Sitting and the full author animation action set
-are not validated on this backend.
+GoTo with a final heading is explicitly unsupported on this backend. Standalone
+idle-facing has been exercised in simulation, but Idle is an ongoing task and no
+terminal facing contract has been confirmed. The proposed composition was removed
+because waiting for an unconfirmed Idle success state could leave GoTo incomplete;
+the observed three-second turn alone does not prove Idle never terminates. The
+author default kinematic behavior is unchanged. Sitting and the full author
+animation action set are not validated on this backend.
 
 The 19-second out-and-return protocol followed by a standalone 90-degree
 idle-facing request completed on revision `20d02e6`. This did not exercise the
@@ -146,7 +150,7 @@ A five-second diagnostic at `5ff637c` subsequently recorded live Fabric skeleton
 transforms at all 20 samples. Foot displacement and thigh rotation relative to
 the pelvis verify articulated motion, without using static USD transforms as a
 fallback. This does not verify collision-proxy skin coverage, gait fidelity or
-the unexecuted GoTo final-heading composition.
+GoTo final-heading completion.
 
 Compatibility paths use the public Kit application loop and PhysX backend
 `resolve_indices` interface. These interface fixes do not establish physical
