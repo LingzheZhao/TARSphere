@@ -1,0 +1,32 @@
+episode: episodes/case/navigate_and_report/task_update.yaml
+target_object_id: bottle/model_8706a0faaed0dbfdea138d3f173c0de7_0
+poses:
+- label: side_lower
+  xy_yaw:
+  - 2.3170180320739746
+  - 2.198108673095703
+  - 2.3471834659576416
+- label: side_upper
+  xy_yaw:
+  - 2.3170180320739746
+  - 3.0986592769622803
+  - -2.3755950927734375
+- label: upper_offset
+  xy_yaw:
+  - 2.4419236183166504
+  - 3.19564151763916
+  - -2.396773099899292
+- label: lower_offset
+  xy_yaw:
+  - 2.4974372386932373
+  - 1.8933067321777344
+  - 2.261930227279663
+diagnostic_prim_paths:
+- /World/env_0/scene/Meshes/Furnitures/picture/model_4b19c5e00e50db5d01a9b87b6a0a2cf7_0
+- /World/env_0/scene/Meshes/Furnitures/shelf/model_2305faa8eb5817f3cdc9659b66c82f27_0
+pose_selection:
+  source: author official occupancy.npy coordinate headers; label 1 navigable
+  clearance_method: Euclidean distance transform with separate actual X/Y grid spacing
+  minimum_raw_obstacle_clearance_m: 0.35
+  limits: Baked map only; not a dynamic collision or path-reachability guarantee.
+    Diagnostic resets never count as navigation.

@@ -103,6 +103,14 @@ def main():
                         'collision': p.HasAPI(UsdPhysics.CollisionAPI),
                         'attributes': {a.GetName(): {'type': str(a.GetTypeName()), 'value': str(a.Get())} for a in p.GetAttributes() if a.GetName().startswith('physics:')}}
                         for p in Usd.PrimRange(prim)]})
+            row['diagnostic_geometry'] = []
+            for path in config.get('diagnostic_prim_paths', []):
+                diagnostic_prim = stage.GetPrimAtPath(path)
+                item = {'path': path, 'exists': diagnostic_prim.IsValid()}
+                if diagnostic_prim.IsValid():
+                    bounds = cache.ComputeWorldBound(diagnostic_prim).ComputeAlignedRange()
+                    item.update(world_bbox_min=list(bounds.GetMin()), world_bbox_max=list(bounds.GetMax()))
+                row['diagnostic_geometry'].append(item)
             row['physics_counter_before_capture'] = before
             row['physics_counter_after_capture'] = env._physics_steps
             if before != env._physics_steps:
