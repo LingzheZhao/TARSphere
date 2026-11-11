@@ -39,6 +39,9 @@ class IsaacsimScene(IScene):
         if task_config.scene_static:
             from pxr import Usd
 
+            # Hold declared pickables before BaseTask wraps bodies or reset
+            # advances physics; the grasp executor later enables their motion.
+            prepare_scene_pickables(scene_prim, task_config.scene_dynamic_body_paths)
             prepare_static_scene_bodies(
                 Usd.PrimRange.AllPrims(scene_prim), task_config.scene_dynamic_body_paths
             )
@@ -92,3 +95,24 @@ def prepare_static_scene_bodies(prims, dynamic_body_paths):
             raise RuntimeError(f"Cannot disable immutable scene body {path}")
         made_static += 1
     return made_static, preserved_dynamic
+
+
+def prepare_scene_pickables(scene_prim, declared_paths):
+    """Hold existing scene pickables at their authored pose until grasp begins.
+
+    Later episode-injected bodies are absent here and retain their own setup.
+    The shared normalizer rejects uneditable instance-proxy rigid descendants.
+    """
+    from tarsphere.infra.manipulation.pickable_physics import configure_dynamic_pickable
+
+    root = str(scene_prim.GetPath()).rstrip("/")
+    stage = scene_prim.GetStage()
+    for path in dict.fromkeys(str(value).rstrip("/") for value in declared_paths):
+        if not path.startswith(root + "/"):
+            continue
+        prim = stage.GetPrimAtPath(path)
+        if not prim or not prim.IsValid():
+            continue
+        if prim.IsInstanceProxy():
+            raise RuntimeError(f"Declared pickable root is an instance proxy: {path}")
+        configure_dynamic_pickable(prim, kinematic=True)
